@@ -1,0 +1,36 @@
+安装libevent
+
+
+从libevent.org下载需要的版本 
+ 这里选用的是libevent-2.0.21-stable版本。
+按照README中的描述进行编译生成库文件 
+ 此版本没有configure.sh文件，需要先运行autogen.sh文件生成configure文件，但在执行“sudo ./autogen.sh”命令时报错 
+ “./autogen.sh: 11: ./autogen.sh: aclocal: not found” 
+ 这是由于电脑中没有安装automake工具造成的，运行如下命令即可解决： 
+  sudo apt-get install autoconf automake libtool 
+  此解决方案来自于安装tslib中遇到的错误：./autogen.sh: 4: autoreconf: not found 
+  然后根据README文件继续，但在执行命令之前要切记切换到root用户，直接在命令前加”sudo”的操作不可行，编译到最后会报错，需要先将当前用户切换到root： 
+  su root 
+  输入root密码（如果不知道root密码可翻阅上文的修改root密码部分），然后继续执行： 
+  ./autogen.sh 
+  然后会链接生成可执行的configure文件，继续执行： 
+  ./configure && make 
+  这里的&&其实就是把两个命令放到一起，效果等同于分别执行”./configure”和”make”。 
+  继续（以root身份）执行（这是一个回归测试命令，因为里面有win32的test程序，所以Ubuntu执行会报错，这一步可忽略，直接执行下一步安装）： 
+  make verify（回归测试，建议忽略这一步） 
+  make install
+
+
+
+
+
+
+---------------------
+
+作者：日影月痕 
+
+来源：CSDN 
+
+原文：https://blog.csdn.net/u013271326/article/details/78230788?utm_source=copy 
+
+版权声明：本文为博主原创文章，转载请附上博文链接！
