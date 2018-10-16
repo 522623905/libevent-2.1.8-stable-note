@@ -200,13 +200,21 @@ evmap_io_clear_(struct event_io_map* ctx)
 /** Expand 'map' with new entries of width 'msize' until it is big enough
 	to store a value in 'slot'.
  */
+// slot是信号值sig，或者文件描述符fd.
+// 当sig或者fd >= map的nentries变量时就会调用此函数
+// msize 等于 sizeof(struct evmap_signal *)
+// event_signal_map要求的数组长度一定要大于slot。
+// 那么之后给定一个sig或者fd，就可以直接通过下标操作快速定位了。
+// 这是因为一个sig或者fd就对应在数组中占有一个位置，并且sig或者fd的值等于其在数组位置的下标值
 static int
 evmap_make_space(struct event_signal_map *map, int slot, int msize)
 {
 	if (map->nentries <= slot) {
+        // posix标准中，信号的种类就只有32种
 		int nentries = map->nentries ? map->nentries : 32;
 		void **tmp;
 
+        // 当slot是一个文件描述符时，就会大于32
 		while (nentries <= slot)
 			nentries <<= 1;
 
@@ -214,6 +222,7 @@ evmap_make_space(struct event_signal_map *map, int slot, int msize)
 		if (tmp == NULL)
 			return (-1);
 
+        // 清零是很有必要的。因为tmp是二级指针，数组里面的元素是一个指针
 		memset(&tmp[map->nentries], 0,
 		    (nentries - map->nentries) * msize);
 
@@ -450,6 +459,10 @@ evmap_signal_add_(struct event_base *base, int sig, struct event *ev)
 			map, sig, sizeof(struct evmap_signal *)) == -1)
 			return (-1);
 	}
+    // 无论是GET_SIGNAL_SLOT_AND_CTOR还是GET_IO_SLOT_AND_CTOR，其作用
+    // 都是在数组(哈希表也是一个数组)中找到fd中的一个结构。
+    // GET_SIGNAL_SLOT_AND_CTOR(ctx, map, sig, evmap_signal, evmap_signal_init,
+    // base->evsigsel->fdinfo_len);
 	GET_SIGNAL_SLOT_AND_CTOR(ctx, map, sig, evmap_signal, evmap_signal_init,
 	    base->evsigsel->fdinfo_len);
 

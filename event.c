@@ -97,6 +97,7 @@ extern const struct eventop win32ops;
 #endif
 
 /* Array of backends in order of preference. */
+// IO复用方法的全局静态数组,按优先顺序排列
 static const struct eventop *eventops[] = {
 #ifdef EVENT__HAVE_EVENT_PORTS
 	&evportops,
@@ -572,6 +573,8 @@ event_base_new_with_config(const struct event_config *cfg)
 	event_debug_mode_too_late = 1;
 #endif
 
+	// 之所以不用mm_malloc是因为mm_malloc并不会清零该内存区域。
+	// 而mm_calloc是会清零申请到的内存区域。这相当于给base初始化
 	if ((base = mm_calloc(1, sizeof(struct event_base))) == NULL) {
 		event_warn("%s: calloc", __func__);
 		return NULL;
@@ -2440,10 +2443,12 @@ event_add(struct event *ev, const struct timeval *tv)
 		return -1;
 	}
 
+	// 加锁
 	EVBASE_ACQUIRE_LOCK(ev->ev_base, th_base_lock);
 
 	res = event_add_nolock_(ev, tv, 0);
 
+	// 解锁
 	EVBASE_RELEASE_LOCK(ev->ev_base, th_base_lock);
 
 	return (res);

@@ -32,6 +32,8 @@
  *	@(#)queue.h	8.5 (Berkeley) 8/20/94
  */
 
+// queue.h是libevent基本数据结构的实现，包括链表，双向链表，队列等
+
 #ifndef	SYS_QUEUE_H__
 #define	SYS_QUEUE_H__
 
@@ -281,6 +283,9 @@ struct name {								\
 #define TAILQ_HEAD_INITIALIZER(head)					\
 	{ NULL, &(head).tqh_first }
 
+// 和前面的TAILQ_HEAD不同，这里并没有结构体名,
+// 所以该结构体只能作为一个匿名结构体。所以，它一般都是另外一个结构体
+// 或者共用体的成员
 #define TAILQ_ENTRY(type)						\
 struct {								\
 	struct type *tqe_next;	/* next element */			\
@@ -290,6 +295,7 @@ struct {								\
 /*
  * tail queue access methods
  */
+// TAILQ_QUEUE定义了一系列的访问和操作方法
 #define	TAILQ_FIRST(head)		((head)->tqh_first)
 #define	TAILQ_END(head)			NULL
 #define	TAILQ_NEXT(elm, field)		((elm)->field.tqe_next)
