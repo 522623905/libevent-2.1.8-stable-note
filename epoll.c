@@ -84,10 +84,14 @@
 #endif
 
 struct epollop {
+    // epoll内部定义的结构体
 	struct epoll_event *events;
+    // epoll中当前注册的事件总数
 	int nevents;
+    // epoll返回的句柄fd
 	int epfd;
 #ifdef USING_TIMERFD
+    // 用于精确定时事件
 	int timerfd;
 #endif
 };
@@ -114,6 +118,7 @@ static int epoll_nochangelist_add(struct event_base *base, evutil_socket_t fd,
 static int epoll_nochangelist_del(struct event_base *base, evutil_socket_t fd,
     short old, short events, void *p);
 
+// 定义epoll支持的后台方法
 const struct eventop epollops = {
 	"epoll",
 	epoll_init,
@@ -145,27 +150,33 @@ epoll_init(struct event_base *base)
 
 #ifdef EVENT__HAVE_EPOLL_CREATE1
 	/* First, try the shiny new epoll_create1 interface, if we have it. */
+    // epoll已经提供新的创建API，epoll_create1，可以设置创建模式
 	epfd = epoll_create1(EPOLL_CLOEXEC);
 #endif
 	if (epfd == -1) {
 		/* Initialize the kernel queue using the old interface.  (The
 		size field is ignored   since 2.6.8.) */
+        // 如果内核没有支持epoll_create1，只能使用epoll_create创建
 		if ((epfd = epoll_create(32000)) == -1) {
 			if (errno != ENOSYS)
 				event_warn("epoll_create");
 			return (NULL);
 		}
+        // 设置EPOLL_CLOEXEC
 		evutil_make_socket_closeonexec(epfd);
 	}
 
+    // 分配struct epollop对象
 	if (!(epollop = mm_calloc(1, sizeof(struct epollop)))) {
 		close(epfd);
 		return (NULL);
 	}
 
+    // 保存epoll句柄描述符
 	epollop->epfd = epfd;
 
 	/* Initialize fields */
+    // 初始化epoll句柄可以处理的事件最大个数以及当前注册事件数的初始值
 	epollop->events = mm_calloc(INITIAL_NEVENT, sizeof(struct epoll_event));
 	if (epollop->events == NULL) {
 		mm_free(epollop);
@@ -174,6 +185,8 @@ epoll_init(struct event_base *base)
 	}
 	epollop->nevents = INITIAL_NEVENT;
 
+    // 如果libevent工作模式是启用epoll的changelist方式，则后台方法变为epollops_changelist
+    // 默认情况下是不选择的
 	if ((base->flags & EVENT_BASE_FLAG_EPOLL_USE_CHANGELIST) != 0 ||
 	    ((base->flags & EVENT_BASE_FLAG_IGNORE_ENV) == 0 &&
 		evutil_getenv_("EVENT_EPOLL_USE_CHANGELIST") != NULL)) {
@@ -188,6 +201,11 @@ epoll_init(struct event_base *base)
 	  timer.  But when the user has set the new PRECISE_TIMER flag for an
 	  event_base, we can try to use timerfd to give them finer granularity.
 	*/
+    // epoll接口通常的精确度是1微秒，因此在Linux环境上，通过使用CLOCK_MONOTONIC_COARSE计时器
+    // 可以获得完美的体验。但是当用户使用新的PRECISE_TIMER模式时，可以使用timerfd获取更细的时间粒度。
+    // timerfd是Linux为用户提供的定时器接口，基于文件描述符，通过文件描述符的可读事件进行超时通知，timerfd、
+    // eventfd、signalfd配合epoll使用，可以构造出零轮询的程序，但是程序没有处理的事件时，程序是被阻塞的；
+    //  timerfd的精度要比uspleep高
 	if ((base->flags & EVENT_BASE_FLAG_PRECISE_TIMER) &&
 	    base->monotonic_timer.monotonic_clock == CLOCK_MONOTONIC) {
 		int fd;
@@ -217,6 +235,10 @@ epoll_init(struct event_base *base)
 	}
 #endif
 
+    // 初始化信号通知的管道
+    // 当设置信号事件时，由于信号捕捉是针对全局来说，所以此处信号捕捉函数是如何通知event_base的呢？
+    // 答案是通过内部管道来实现的，一旦信号捕捉函数捕捉到信号，则将相应信号通过管道传递给event_base，
+    // 然后event_base根据信号值将相应的回调事件加入激活事件队列，等待event_loop的回调
 	evsig_init_(base);
 
 	return (epollop);

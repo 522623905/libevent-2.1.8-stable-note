@@ -173,6 +173,8 @@ HT_HEAD(event_io_map, event_map_entry);
    defined, this structure is also used as event_io_map, which maps fds to a
    list of events.
 */
+// 用来存储信号数字和一系列事件之间的映射。如果EVMAP_USE_HT没有定义，即不是在win32下，
+// struct event_io_map和struct event_signal_map一致，event_io_map是将fds和事件映射到一块
 struct event_signal_map {
 	/* An array of evmap_io * or of evmap_signal *; empty entries are
 	 * set to NULL. */
@@ -205,6 +207,8 @@ struct event_change;
 
 /* List of 'changes' since the last call to eventop.dispatch.  Only maintained
  * if the backend is using changesets. */
+// 列举自从上一次eventop.dispatch调用之后的改变列表。
+// 只有在后台使用改变集合时才会维护这个列表，否则不维护？
 struct event_changelist {
 	struct event_change *changes;
 	int n_changes;
@@ -348,7 +352,7 @@ struct event_base {
 
 	/** Stored timeval: used to avoid calling gettimeofday/clock_gettime
 	 * too often. */
-    // 存储时间：用来避免频繁调用gettimeofday/clock_gettime
+    // 缓存的时间：用来避免频繁调用gettimeofday/clock_gettime
 	struct timeval tv_cache;
 
     // monotonic格式的时间
@@ -356,10 +360,10 @@ struct event_base {
 
 	/** Difference between internal time (maybe from clock_gettime) and
 	 * gettimeofday. */
-    // 内部时间（可以从clock_gettime获取）和gettimeofday之间的差异
+    // 内部时间（可以从clock_gettime获取）和gettimeofday之间的差值
 	struct timeval tv_clock_diff;
 	/** Second in which we last updated tv_clock_diff, in monotonic time. */
-    // 更新内部时间的间隔秒数
+    // 上一次更新内部时间的间隔秒数
 	time_t last_updated_clock_diff;
 
 #ifndef EVENT__DISABLE_THREAD_SUPPORT

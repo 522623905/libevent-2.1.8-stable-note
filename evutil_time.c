@@ -258,6 +258,10 @@ evutil_gettime_monotonic(struct evutil_monotonic_timer *timer,
    Platforms don't agree about whether it should jump on a sleep/resume.
  */
 
+// 配置单调递增的时间，默认情况下，会使用EV_MONOTONIC模式获取系统时间，
+// 并将event_base的monotonic_clock模式设置为EV_MONOTONIC；
+// monotonic时间是单调递增的时间，不受系统修改时间影响，
+// 对于计算两个时间点之间的时间比较精确；real时间是系统时间，受系统时间影响
 int
 evutil_configure_monotonic_time_(struct evutil_monotonic_timer *base,
     int flags)
@@ -265,9 +269,18 @@ evutil_configure_monotonic_time_(struct evutil_monotonic_timer *base,
 	/* CLOCK_MONOTONIC exists on FreeBSD, Linux, and Solaris.  You need to
 	 * check for it at runtime, because some older kernel versions won't
 	 * have it working. */
+    // CLOCK_MONOTONIC在FreeBSD，Linux，Solaris一般是支持的。你需要运行时检查，因为
+    // 一些老的内核版本可能不支持
+
+    // 如果定义了CLOCK_MONOTONIC_COARSE编译选项，则检查event_base工作模式是否选择了EV_MONOT_PRECISE；
+    // 如果选择了EV_MONOT_PRECISE，则设置标志位precise，表明选择使用准确的时间模式；
+    // 默认情况下，flags采用的是EV_MONOT_PRECISE，所以precise＝EV_MONOT_PRECISE＝1
+
 #ifdef CLOCK_MONOTONIC_COARSE
 	const int precise = flags & EV_MONOT_PRECISE;
 #endif
+    // 设置fallback标志位，查看是否为EV_MONOT_FALLBACK=2模式
+    // 默认情况下，flags采用的是EV_MONOT_PRECISE，所以fallback为0
 	const int fallback = flags & EV_MONOT_FALLBACK;
 	struct timespec	ts;
 
@@ -279,6 +292,9 @@ evutil_configure_monotonic_time_(struct evutil_monotonic_timer *base,
 		 * value. */
 		event_errx(1,"I didn't expect CLOCK_MONOTONIC_COARSE to be < 0");
 	}
+    // 如果既没有选择EV_MONOT_PRECISE模式，也没有选择EV_MONOT_FALLBACK模式，则使用
+    // CLOCK_MONOTONIC_COARSE获取当前系统时间
+    // 默认情况下选择的是EV_MONOT_PRECISE，所以不走此分支
 	if (! precise && ! fallback) {
 		if (clock_gettime(CLOCK_MONOTONIC_COARSE, &ts) == 0) {
 			base->monotonic_clock = CLOCK_MONOTONIC_COARSE;
@@ -286,6 +302,11 @@ evutil_configure_monotonic_time_(struct evutil_monotonic_timer *base,
 		}
 	}
 #endif
+    // 如果没有选择EV_MONOT_FALLBACK，则以CLOCK_MONOTONIC模式获取系统时间，并将
+    // event_base的monotonic_clock模式设置为CLOCK_MONOTONIC；
+    // 默认情况下，选择的是EV_MONOT_PRECISE，所以此分支执行，
+    // 此函数最终的结果是获取CLOCK_MONOTONIC模式的时间，并将event_base的时钟模式设置为
+    // CLOCK_MONOTONIC模式
 	if (!fallback && clock_gettime(CLOCK_MONOTONIC, &ts) == 0) {
 		base->monotonic_clock = CLOCK_MONOTONIC;
 		return 0;

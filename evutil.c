@@ -2387,6 +2387,7 @@ evutil_issetugid(void)
 #endif
 }
 
+// 实际上是getenv函数的封装，用来获取环境变量信息
 const char *
 evutil_getenv_(const char *varname)
 {

@@ -370,25 +370,36 @@ HT_GENERATE(event_debug_map, event_debug_entry, node, hash_debug_entry,
  * clock_gettime or gettimeofday as appropriate to find out the right time.
  * Return 0 on success, -1 on failure.
  */
+// 此函数主要用来获取当前event_base中缓存的时间，并设置使用系统时间更新event_base缓存时间的时间间隔，
+// 并获取当前系统的monotonic时间和当前系统的real时间之间差值并存储在event_base中
 static int
 gettime(struct event_base *base, struct timeval *tp)
 {
 	EVENT_BASE_ASSERT_LOCKED(base);
 
+        // 首先查看base中是否有缓存的时间，如果有，直接使用缓存时间，然后返回即可
 	if (base->tv_cache.tv_sec) {
 		*tp = base->tv_cache;
 		return (0);
 	}
 
+        // 使用monotonic_timer获取当前时间，二选一：
+        // CLOCK_MONOTONIC_COARSE 和 CLOCK_MONOTONIC
+        // 默认情况下是 CLOCK_MONOTONIC模式
 	if (evutil_gettime_monotonic_(&base->monotonic_timer, tp) == -1) {
 		return -1;
 	}
 
+        // 查看是否需要更新缓存的时间
+        // 如果上次更新时间的时间点距离当前时间点的间隔超过CLOCK_SYNC_INTERVAL，则需要更新
 	if (base->last_updated_clock_diff + CLOCK_SYNC_INTERVAL
 	    < tp->tv_sec) {
 		struct timeval tv;
+                // 使用gettimeofday获取当前系统real时间
 		evutil_gettimeofday(&tv,NULL);
+                // 将当前系统real时间和monotonic时间做差，存到base中
 		evutil_timersub(&tv, tp, &base->tv_clock_diff);
+                // 保存当前更新的时间点
 		base->last_updated_clock_diff = tp->tv_sec;
 	}
 
@@ -477,13 +488,17 @@ event_init(void)
 	return (base);
 }
 
+// 创建默认的event_base
 struct event_base *
 event_base_new(void)
 {
 	struct event_base *base = NULL;
+    // 调用event_config_new函数创建默认的struct event_config对象
 	struct event_config *cfg = event_config_new();
 	if (cfg) {
+        // 使用配置信息创建event_base
 		base = event_base_new_with_config(cfg);
+        // 释放配置信息对象struct event_config
 		event_config_free(cfg);
 	}
 	return base;
@@ -521,6 +536,7 @@ event_is_method_disabled(const char *name)
 	return (evutil_getenv_(environment) != NULL);
 }
 
+// 获取后台方法的工作模式
 int
 event_base_get_features(const struct event_base *base)
 {
@@ -562,6 +578,7 @@ event_disable_debug_mode(void)
 #endif
 }
 
+// 使用配置信息创建event_base
 struct event_base *
 event_base_new_with_config(const struct event_config *cfg)
 {
@@ -583,45 +600,74 @@ event_base_new_with_config(const struct event_config *cfg)
 	if (cfg)
 		base->flags = cfg->flags;
 
+    // 默认情况下，cfg->flags ＝ EVENT_BASE_FLAG_NOBLOCK，所以是没有设置忽略环境变量，
+    // 因此should_check_enviroment ＝ 1，是应该检查环境变量的
 	should_check_environment =
 	    !(cfg && (cfg->flags & EVENT_BASE_FLAG_IGNORE_ENV));
 
 	{
 		struct timeval tmp;
+        // 如果使用精确时间，则precise_time为1，否则为0
+        // 默认配置下，cfg->flags＝EVENT_BASE_FLAG_NOBLOCK，所以precise_time ＝ 0
 		int precise_time =
 		    cfg && (cfg->flags & EVENT_BASE_FLAG_PRECISE_TIMER);
 		int flags;
-		if (should_check_environment && !precise_time) {
+        // 如果检查EVENT_*等环境变量并且不使用精确时间，
+        // 则需要检查编译时的环境变量中是否打开了使用精确时间的模式；
+        // 这一段检查的目的是说，虽然配置结构体struct event_config中没有指定
+        // event_base使用精确时间的模式，但是libevent提供编译时使用环境变量来控制
+        // 使用精确时间的模式，所以如果开启检查环境变量的开关，则需要检查是否在编译时
+        // 打开了使用精确时间的模式。例如在CMakeList中就有有关开启选项
+        if (should_check_environment && !precise_time) {
 			precise_time = evutil_getenv_("EVENT_PRECISE_TIMER") != NULL;
 			base->flags |= EVENT_BASE_FLAG_PRECISE_TIMER;
 		}
+        // 根据precise_time的标志信息，确认是否使用MONOT_PRECISE模式
 		flags = precise_time ? EV_MONOT_PRECISE : 0;
 		evutil_configure_monotonic_time_(&base->monotonic_timer, flags);
 
+        // 根据base获取当前的时间
+        // 如果base中有缓存的时间，则将缓存的时间赋给tmp，然后返回即可；
+        // 如果base中没有缓存的时间，则使用clock_gettime获取当前系统的monotonic时间；
+        // 否则根据上次更新系统时间的时间点、更新间隔、以及当前使用clock_gettime等函数获取当前的系统时间
+        // 查看是否需要更新base->tv_clock_diff以及base->last_updated_clock_diff
 		gettime(base, &tmp);
 	}
 
+    // 创建timer的最小堆
 	min_heap_ctor_(&base->timeheap);
 
+    // 内部信号通知的管道，0读1写
 	base->sig.ev_signal_pair[0] = -1;
 	base->sig.ev_signal_pair[1] = -1;
+    // 内部线程通知的文件描述符，0读1写
 	base->th_notify_fd[0] = -1;
 	base->th_notify_fd[1] = -1;
 
+    // 初始化下一次激活的队列
 	TAILQ_INIT(&base->active_later_queue);
 
+    // 初始化IO事件和文件描述符的映射
 	evmap_io_initmap_(&base->io);
+    // 初始化信号和文件描述符的映射
 	evmap_signal_initmap_(&base->sigmap);
+    // 初始化变化事件列表
 	event_changelist_init_(&base->changelist);
 
+    // 在没有初始化后台方法之前，后台方法必需的数据信息为空
 	base->evbase = NULL;
 
+    // 如果配置信息对象struct event_config存在，则依据配置信息配置，
+    // 否则，赋给默认初始值
 	if (cfg) {
 		memcpy(&base->max_dispatch_time,
 		    &cfg->max_dispatch_interval, sizeof(struct timeval));
 		base->limit_callbacks_after_prio =
 		    cfg->limit_callbacks_after_prio;
 	} else {
+        // max_dispatch_time.tv_sec＝－1即不进行此项检查
+        // limit_callbacks_after_prio=1是指>=1时都需要检查，最高优先级为0，
+        // 即除了最高优先级事件执行时不需要检查之外，其他优先级都需要检查
 		base->max_dispatch_time.tv_sec = -1;
 		base->limit_callbacks_after_prio = 1;
 	}
@@ -634,27 +680,35 @@ event_base_new_with_config(const struct event_config *cfg)
 	    base->max_dispatch_time.tv_sec == -1)
 		base->limit_callbacks_after_prio = INT_MAX;
 
+    // 遍历静态全局变量eventops，对选择的后台方法进行初始化
 	for (i = 0; eventops[i] && !base->evbase; i++) {
 		if (cfg != NULL) {
 			/* determine if this backend should be avoided */
+            // 如果方法已经屏蔽，则跳过去，继续遍历下一个方法
+            // 默认情况下，是不屏蔽任何后台方法，除非通过编译选项控制或者使用API屏蔽
 			if (event_config_is_avoided_method(cfg,
 				eventops[i]->name))
 				continue;
+            // 如果后台方法的工作模式特征和配置的工作模式不同，则跳过去
 			if ((eventops[i]->features & cfg->require_features)
 			    != cfg->require_features)
 				continue;
 		}
 
 		/* also obey the environment variables */
+        // 如果检查环境变量，并发现OS环境不支持的话，也会跳过去
 		if (should_check_environment &&
 		    event_is_method_disabled(eventops[i]->name))
 			continue;
 
+        // 保存后台方法句柄，实际是静态全局变量数组成员
 		base->evsel = eventops[i];
 
+        // 调用相应后台方法的初始化函数进行初始化
 		base->evbase = base->evsel->init(base);
 	}
 
+    // 如果遍历一遍没有发现合适的后台方法，就报错退出，退出前释放资源
 	if (base->evbase == NULL) {
 		event_warnx("%s: no event mechanism available",
 		    __func__);
@@ -663,10 +717,12 @@ event_base_new_with_config(const struct event_config *cfg)
 		return NULL;
 	}
 
+    // 获取环境变量EVENT_SHOW_METHOD，是否打印输出选择的后台方法名字
 	if (evutil_getenv_("EVENT_SHOW_METHOD"))
 		event_msgx("libevent using: %s", base->evsel->name);
 
 	/* allocate a single active event queue */
+    // 分配的优先级队列成员个数为1
 	if (event_base_priority_init(base, 1) < 0) {
 		event_base_free(base);
 		return NULL;
@@ -911,6 +967,9 @@ event_base_free_nofinalize(struct event_base *base)
 	event_base_free_(base, 0);
 }
 
+// 释放event_base对象
+// 注意：这个函数不会关闭任何fds或者释放在执行event_new时任何传递给callback的参数
+// 如果未决的关闭类型的回调，本函数会唤醒这些回调
 void
 event_base_free(struct event_base *base)
 {
@@ -1060,6 +1119,8 @@ event_gettime_monotonic(struct event_base *base, struct timeval *tv)
   return rv;
 }
 
+// 获取当前环境可以支持的后台方法
+// 返回指针数组，每个指针指向支持方法的名字。数组的末尾指向NULL
 const char **
 event_get_supported_methods(void)
 {
@@ -1069,16 +1130,19 @@ event_get_supported_methods(void)
 	int i = 0, k;
 
 	/* count all methods */
+    // 遍历静态全局数组eventops，获得编译后的后台方法个数
 	for (method = &eventops[0]; *method != NULL; ++method) {
 		++i;
 	}
 
 	/* allocate one more than we need for the NULL pointer */
+    // 分配临时空间，二级指针，用来存放名字指针
 	tmp = mm_calloc((i + 1), sizeof(char *));
 	if (tmp == NULL)
 		return (NULL);
 
 	/* populate the array with the supported methods */
+    // 在tmp数组中保存名字指针
 	for (k = 0, i = 0; eventops[k] != NULL; ++k) {
 		tmp[i++] = eventops[k]->name;
 	}
@@ -1092,22 +1156,37 @@ event_get_supported_methods(void)
 	return (methods);
 }
 
+// 分配新的event_config对象并赋初值。event_config对象用来改变event_base的行为。
+// 返回event_config对象，里面存放着配置信息，失败则返回NULL
+// 相关查看event_base_new_with_config，event_config_free，event_config结构体等
 struct event_config *
 event_config_new(void)
 {
+    // 使用内部分配api mm_calloc分配event_config对象
 	struct event_config *cfg = mm_calloc(1, sizeof(*cfg));
 
 	if (cfg == NULL)
 		return (NULL);
 
+    // 初始化屏蔽的后台方法列表
 	TAILQ_INIT(&cfg->entries);
+    // 设置最大调度时间间隔，初始为非法值
 	cfg->max_dispatch_interval.tv_sec = -1;
+    // 设置最大调度回调函数个数，初始值为int的最大值
 	cfg->max_dispatch_callbacks = INT_MAX;
+    // 设置优先级后的回调函数的限制，初始值为1
 	cfg->limit_callbacks_after_prio = 1;
+
+    // 由于初始分配时赋初值为1，经过上述显式设置之后，还有几个字段的初始值是1
+    // 查看event_config定义发现，还有三个字段使用的初始赋值：
+    // n_cpus_hint ＝ 1
+    // require_features = 1，查看后台方法特征宏定义，发现是边沿触发方式
+    // flags ＝ 1，查看event_base支持的模式，发现是非阻塞模式
 
 	return (cfg);
 }
 
+// 屏蔽的后台方法释放
 static void
 event_config_entry_free(struct event_config_entry *entry)
 {
@@ -1116,11 +1195,13 @@ event_config_entry_free(struct event_config_entry *entry)
 	mm_free(entry);
 }
 
+// 释放event_config对象的所有内存，和event_config_new配对使用
 void
 event_config_free(struct event_config *cfg)
 {
 	struct event_config_entry *entry;
 
+    // 遍历屏蔽的后台方法列表，释放屏蔽的后台方法项目
 	while ((entry = TAILQ_FIRST(&cfg->entries)) != NULL) {
 		TAILQ_REMOVE(&cfg->entries, entry, next);
 		event_config_entry_free(entry);
@@ -1128,6 +1209,9 @@ event_config_free(struct event_config *cfg)
 	mm_free(cfg);
 }
 
+// 设置event_base的工作模式，需要在申请event_config之后运行，在配置event_base之前执行；
+// 可以设置多个工作模式同时存在，但是需要注意的是不是每种工作模式都是可以设置的，
+// 需要查看本地内核环境以及后台方法是否支持
 int
 event_config_set_flag(struct event_config *cfg, int flag)
 {
@@ -1137,23 +1221,32 @@ event_config_set_flag(struct event_config *cfg, int flag)
 	return 0;
 }
 
+// 输入需要屏蔽的方法名字；可以用来避免某些不支持特定文件描述符类型的后台方法，
+// 或者调试用来屏蔽某些特定事件的机制。应用可以使用多个event_bases以适应不兼容的
+// 文件描述符类型
 int
 event_config_avoid_method(struct event_config *cfg, const char *method)
 {
+    // 申请存储屏蔽后台方法名字的空间
 	struct event_config_entry *entry = mm_malloc(sizeof(*entry));
 	if (entry == NULL)
 		return (-1);
 
+    // 申请后台方法名字空间
 	if ((entry->avoid_method = mm_strdup(method)) == NULL) {
 		mm_free(entry);
 		return (-1);
 	}
 
+    // 将屏蔽的方法插入屏蔽队列
 	TAILQ_INSERT_TAIL(&cfg->entries, entry, next);
 
 	return (0);
 }
 
+// 设置后台方法特征，注意不是每个平台都会支持所有特征或者支持几个特征同时存在；
+// 设置后台方法特征的代码应该在event_base_new_with_config之前进行；
+// 注意，这里不是采用或的方式，而是直接替换为输入的方法特征
 int
 event_config_require_features(struct event_config *cfg,
     int features)
@@ -1164,6 +1257,7 @@ event_config_require_features(struct event_config *cfg,
 	return (0);
 }
 
+// 设置cpu个数提示信息
 int
 event_config_set_num_cpus_hint(struct event_config *cfg, int cpus)
 {
@@ -1173,17 +1267,21 @@ event_config_set_num_cpus_hint(struct event_config *cfg, int cpus)
 	return (0);
 }
 
+// 设置event_base调度的一些间隔信息
 int
 event_config_set_max_dispatch_interval(struct event_config *cfg,
     const struct timeval *max_interval, int max_callbacks, int min_priority)
 {
+    // 如果max_interval不为空，则将输入的参数拷贝到cfg中，否则设置为非法值
 	if (max_interval)
 		memcpy(&cfg->max_dispatch_interval, max_interval,
 		    sizeof(struct timeval));
 	else
 		cfg->max_dispatch_interval.tv_sec = -1;
+    // 如果max_callbacks >=0,则设置为max_callbacks，否则设置为INT_MAX
 	cfg->max_dispatch_callbacks =
 	    max_callbacks >= 0 ? max_callbacks : INT_MAX;
+    // 如果<0，则所有优先级都执行检查，否则设置为传入参数
 	if (min_priority < 0)
 		min_priority = 0;
 	cfg->limit_callbacks_after_prio = min_priority;
@@ -1236,6 +1334,7 @@ err:
 	return (r);
 }
 
+// 获取event_base的优先级个数
 int
 event_base_get_npriorities(struct event_base *base)
 {
@@ -1775,6 +1874,7 @@ event_base_dispatch(struct event_base *event_base)
 	return (event_base_loop(event_base, 0));
 }
 
+// 获取当前正在使用的后台方法
 const char *
 event_base_get_method(const struct event_base *base)
 {

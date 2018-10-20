@@ -184,6 +184,7 @@ void evmap_io_clear_(struct event_io_map *ctx)
 #define GET_IO_SLOT_AND_CTOR(x,map,slot,type,ctor,fdinfo_len)	\
 	GET_SIGNAL_SLOT_AND_CTOR(x,map,slot,type,ctor,fdinfo_len)
 #define FDINFO_OFFSET sizeof(struct evmap_io)
+// 初始化IO事件和文件描述符的映射
 void
 evmap_io_initmap_(struct event_io_map* ctx)
 {
@@ -233,6 +234,7 @@ evmap_make_space(struct event_signal_map *map, int slot, int msize)
 	return (0);
 }
 
+// 初始化信号和文件描述符的映射
 void
 evmap_signal_initmap_(struct event_signal_map *ctx)
 {
@@ -706,6 +708,7 @@ struct event_changelist_fdinfo {
 		       * a no-such-element */
 };
 
+// 初始化变化事件列表
 void
 event_changelist_init_(struct event_changelist *changelist)
 {

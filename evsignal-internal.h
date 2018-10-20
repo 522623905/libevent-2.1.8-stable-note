@@ -40,6 +40,7 @@ struct evsig_info {
 	/* Event watching ev_signal_pair[1] */
 	struct event ev_signal;
 	/* Socketpair used to send notifications from the signal handler */
+    // 内部信号通知的管道，0读1写
 	evutil_socket_t ev_signal_pair[2];
 	/* True iff we've added the ev_signal event yet. */
 	int ev_signal_added;
