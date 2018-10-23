@@ -180,6 +180,7 @@ void evmap_io_clear_(struct event_io_map *ctx)
 /* If we aren't using hashtables, then define the IO_SLOT macros and functions
    as thin aliases over the SIGNAL_SLOT versions. */
 #ifndef EVMAP_USE_HT
+// 根据文件描述符获取该fd上注册的所有事件列表
 #define GET_IO_SLOT(x,map,slot,type) GET_SIGNAL_SLOT(x,map,slot,type)
 #define GET_IO_SLOT_AND_CTOR(x,map,slot,type,ctor,fdinfo_len)	\
 	GET_SIGNAL_SLOT_AND_CTOR(x,map,slot,type,ctor,fdinfo_len)
@@ -273,10 +274,14 @@ evmap_io_init(struct evmap_io *entry)
 
 /* return -1 on error, 0 on success if nothing changed in the event backend,
  * and 1 on success if something did. */
+// 将事件和文件描述符映射
+// 同一个文件描述符上可能会注册多个IO事件，因此base内部维护一个文件描述符和事件之间的映射表
 int
 evmap_io_add_(struct event_base *base, evutil_socket_t fd, struct event *ev)
 {
+    // 后台方法
 	const struct eventop *evsel = base->evsel;
+    // IO事件和文件描述符的映射
 	struct event_io_map *io = &base->io;
 	struct evmap_io *ctx = NULL;
 	int nread, nwrite, nclose, retval = 0;
@@ -288,19 +293,29 @@ evmap_io_add_(struct event_base *base, evutil_socket_t fd, struct event *ev)
 	if (fd < 0)
 		return 0;
 
+    // 如果不使用EVMAP_USE_HT，即非win32下
 #ifndef EVMAP_USE_HT
+    // 如果文件描述符大于项目数，则需要为新描述符创建空间
 	if (fd >= io->nentries) {
+        // 此函数为新添加的fd开辟空间，io中entries是二级指针，存放的是具体entry的地址，为了达到快速查找的目的，
+        // 此处申请的空间大小为最大的fd，fd存放的位置就是相对于entries起始位置的偏移，即将fd作为二级指针的偏移量
+        // 因此可能会浪费一些空间，通过空间换时间来提高查找速度
 		if (evmap_make_space(io, fd, sizeof(struct evmap_io *)) == -1)
 			return (-1);
 	}
 #endif
+    // 获取IO映射的槽以及存储的环境变量
+    // 其实就是根据fd，从evmap_io中获取该fd上注册的事件集合，因为同一个fd上可以注册多个事件
 	GET_IO_SLOT_AND_CTOR(ctx, io, fd, evmap_io, evmap_io_init,
 						 evsel->fdinfo_len);
 
+    // 获取原有事件的读事件个数、写事件个数、关闭事件个数
 	nread = ctx->nread;
 	nwrite = ctx->nwrite;
 	nclose = ctx->nclose;
 
+    // old变量用来存储原有事件类型
+    // 如果读、写、关闭事件个数不为0，则具有该事件类型
 	if (nread)
 		old |= EV_READ;
 	if (nwrite)
@@ -308,6 +323,10 @@ evmap_io_add_(struct event_base *base, evutil_socket_t fd, struct event *ev)
 	if (nclose)
 		old |= EV_CLOSED;
 
+    // res变量保存当前新增的事件类型，注意是新增的，而不是所有的
+    // 如果当前事件类型包含读事件，则如果原来没有读事件类型，则将新增读事件类型保存到res中；
+    // 如果当前事件类型包含写事件，则如果原来没有写事件类型，则将新增写事件类型保存到res中；
+    // 如果当前事件类型包含关闭事件，则如果原来没有关闭事件类型，则将新增关闭事件类型保存到res中；
 	if (ev->ev_events & EV_READ) {
 		if (++nread == 1)
 			res |= EV_READ;
@@ -320,6 +339,7 @@ evmap_io_add_(struct event_base *base, evutil_socket_t fd, struct event *ev)
 		if (++nclose == 1)
 			res |= EV_CLOSED;
 	}
+    // 如果读、写、关闭事件注册次数大于65535，则报错
 	if (EVUTIL_UNLIKELY(nread > 0xffff || nwrite > 0xffff || nclose > 0xffff)) {
 		event_warnx("Too many events reading or writing on fd %d",
 		    (int)fd);
@@ -333,6 +353,7 @@ evmap_io_add_(struct event_base *base, evutil_socket_t fd, struct event *ev)
 		return -1;
 	}
 
+    // 如果有新增事件类型，则将新增事件类型注册到后台方法
 	if (res) {
 		void *extra = ((char*)ctx) + sizeof(struct evmap_io);
 		/* XXX(niels): we cannot mix edge-triggered and
@@ -347,6 +368,7 @@ evmap_io_add_(struct event_base *base, evutil_socket_t fd, struct event *ev)
 	ctx->nread = (ev_uint16_t) nread;
 	ctx->nwrite = (ev_uint16_t) nwrite;
 	ctx->nclose = (ev_uint16_t) nclose;
+    // 将事件插入到环境变量的队列中，从头部插入
 	LIST_INSERT_HEAD(&ctx->events, ev, ev_io_next);
 
 	return (retval);
@@ -354,6 +376,7 @@ evmap_io_add_(struct event_base *base, evutil_socket_t fd, struct event *ev)
 
 /* return -1 on error, 0 on success if nothing changed in the event backend,
  * and 1 on success if something did. */
+// 从IO事件与文件描述符的映射中删除事件
 int
 evmap_io_del_(struct event_base *base, evutil_socket_t fd, struct event *ev)
 {
@@ -373,12 +396,15 @@ evmap_io_del_(struct event_base *base, evutil_socket_t fd, struct event *ev)
 		return (-1);
 #endif
 
+    // 根据fd获取相关事件的ctx
 	GET_IO_SLOT(ctx, io, fd, evmap_io);
 
+    // 获取当前fd上注册的读、写、关闭事件个数
 	nread = ctx->nread;
 	nwrite = ctx->nwrite;
 	nclose = ctx->nclose;
 
+    // 使用old变量保存原有的事件类型
 	if (nread)
 		old |= EV_READ;
 	if (nwrite)
@@ -386,6 +412,7 @@ evmap_io_del_(struct event_base *base, evutil_socket_t fd, struct event *ev)
 	if (nclose)
 		old |= EV_CLOSED;
 
+    // 使用res保存删除的事件类型
 	if (ev->ev_events & EV_READ) {
 		if (--nread == 0)
 			res |= EV_READ;
@@ -402,6 +429,8 @@ evmap_io_del_(struct event_base *base, evutil_socket_t fd, struct event *ev)
 		EVUTIL_ASSERT(nclose >= 0);
 	}
 
+    //  如果删除的事件不为空，则调用evsel->del删除事件
+    //  实际上是调用的后台方法的del方法，这是在event_base创建时指定的
 	if (res) {
 		void *extra = ((char*)ctx) + sizeof(struct evmap_io);
 		if (evsel->del(base, ev->ev_fd, old, res, extra) == -1) {
@@ -419,6 +448,7 @@ evmap_io_del_(struct event_base *base, evutil_socket_t fd, struct event *ev)
 	return (retval);
 }
 
+// 根据fd和事件类型之间的映射表，找出所有该类型事件，全部激活，将注册到指定fd上的特定事件类型的事件插入激活队列中
 void
 evmap_io_active_(struct event_base *base, evutil_socket_t fd, short events)
 {
@@ -430,11 +460,14 @@ evmap_io_active_(struct event_base *base, evutil_socket_t fd, short events)
 	if (fd < 0 || fd >= io->nentries)
 		return;
 #endif
+    // 根据文件描述符获取该fd上注册的所有事件列表
 	GET_IO_SLOT(ctx, io, fd, evmap_io);
 
 	if (NULL == ctx)
 		return;
-	LIST_FOREACH(ev, &ctx->events, ev_io_next) {
+
+    // 遍历该描述符上注册事件列表，找出事件类型与触发事件类型一致的事件，并将事件插入激活队列中
+    LIST_FOREACH(ev, &ctx->events, ev_io_next) {
 		if (ev->ev_events & events)
 			event_active_nolock_(ev, ev->ev_events & events, 1);
 	}
@@ -448,37 +481,47 @@ evmap_signal_init(struct evmap_signal *entry)
 	LIST_INIT(&entry->events);
 }
 
-
+// 事件到信号的映射
+// 同一个信号上可能会注册多个事件，因此，base内部会维护一份信号到事件的映射表
 int
 evmap_signal_add_(struct event_base *base, int sig, struct event *ev)
 {
+    // 获取信号事件处理的后台方法以及信号与事件映射的map
 	const struct eventop *evsel = base->evsigsel;
 	struct event_signal_map *map = &base->sigmap;
 	struct evmap_signal *ctx = NULL;
 
+    // 如果注册的信号大于映射表中的项目个数，则需要为新注册信号申请空间
 	if (sig >= map->nentries) {
+        // 此函数为新添加的sig开辟空间，io中entries是二级指针，存放的是具体entry的地址，为了达到快速查找的目的，
+        // 此处申请的空间大小为最大的sig, sig存放的位置就是相对于entries起始位置的便宜，即将sig作为二级指针的偏移量
+        // 因此可能会浪费一些空间，通过空间换时间来提高查找速度
 		if (evmap_make_space(
 			map, sig, sizeof(struct evmap_signal *)) == -1)
 			return (-1);
 	}
     // 无论是GET_SIGNAL_SLOT_AND_CTOR还是GET_IO_SLOT_AND_CTOR，其作用
-    // 都是在数组(哈希表也是一个数组)中找到fd中的一个结构。
-    // GET_SIGNAL_SLOT_AND_CTOR(ctx, map, sig, evmap_signal, evmap_signal_init,
-    // base->evsigsel->fdinfo_len);
+    // 都是在数组(哈希表也是一个数组)中找到fd中的一个结构,
+    // 根据信号获取信号与事件映射的环境变量ctx
 	GET_SIGNAL_SLOT_AND_CTOR(ctx, map, sig, evmap_signal, evmap_signal_init,
 	    base->evsigsel->fdinfo_len);
 
+    // 如果此信号下映射的事件为空，则将信号与文件描述符注册到后台方法中
+    // evsel->add实际上调用的是base->evsigsel->add函数，查看evsig_init函数中初始化过程
+    // 得知，实际上调用的是evsig_add函数，这里就把外部信号添加到信号捕捉函数中了
 	if (LIST_EMPTY(&ctx->events)) {
 		if (evsel->add(base, ev->ev_fd, 0, EV_SIGNAL, NULL)
 		    == -1)
 			return (-1);
 	}
 
+    // 将新注册的信号事件插入到环境变量头部
 	LIST_INSERT_HEAD(&ctx->events, ev, ev_signal_next);
 
 	return (1);
 }
 
+// 从信号事件与信号的映射表中删除事件
 int
 evmap_signal_del_(struct event_base *base, int sig, struct event *ev)
 {
@@ -489,10 +532,14 @@ evmap_signal_del_(struct event_base *base, int sig, struct event *ev)
 	if (sig >= map->nentries)
 		return (-1);
 
+    // // 根据sig获取相关ctx
 	GET_SIGNAL_SLOT(ctx, map, sig, evmap_signal);
 
+    // 删除事件
 	LIST_REMOVE(ev, ev_signal_next);
 
+    // 如果信号上注册的事件为空，则需要从信号的后台处理方法上删除
+    // 实际上调用的是evsig_del函数，这是在evsig_init函数中指定的
 	if (LIST_FIRST(&ctx->events) == NULL) {
 		if (evsel->del(base, ev->ev_fd, 0, EV_SIGNAL, NULL) == -1)
 			return (-1);

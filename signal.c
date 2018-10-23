@@ -91,6 +91,7 @@
 static int evsig_add(struct event_base *, evutil_socket_t, short, short, void *);
 static int evsig_del(struct event_base *, evutil_socket_t, short, short, void *);
 
+// 信号事件的后台处理方法
 static const struct eventop evsigops = {
 	"signal",
 	NULL,
@@ -108,7 +109,9 @@ static void *evsig_base_lock = NULL;
 /* The event base that's currently getting informed about signals. */
 static struct event_base *evsig_base = NULL;
 /* A copy of evsig_base->sigev_n_signals_added. */
+// 当前event_base中增加的信号事件的总数
 static int evsig_base_n_signals_added = 0;
+// 一个是信号事件的文件描述符,base->sig.ev_signal_pair[1]，即用来写入信号的内部管道
 static evutil_socket_t evsig_base_fd = -1;
 
 static void __cdecl evsig_handler(int sig);
@@ -127,19 +130,28 @@ evsig_set_base_(struct event_base *base)
 }
 
 /* Callback for when the signal handler write a byte to our signaling socket */
+// 当信号句柄往信号处理socket中写入字节时的回调函数
+// arg一般是event_base句柄
+// 每当注册信号发生时，就会将该信号绑定的回调函数插入到激活队列中
 static void
 evsig_cb(evutil_socket_t fd, short what, void *arg)
 {
+    // 用来存储信号通知管道的数据，每个字节代表一个信号
 	static char signals[1024];
 	ev_ssize_t n;
 	int i;
+    // NSIG是linux系统定义的常量
+    // 用来存储捕捉的信号次数，每个数组变量代表一个信号
 	int ncaught[NSIG];
 	struct event_base *base;
 
 	base = arg;
 
+    // 清空存储捕捉信号的缓存
 	memset(&ncaught, 0, sizeof(ncaught));
 
+    // 循环读取信号管道中的信号，直到读完或者无法读取为止。
+    // 并将读取的信号，并记录信号发生的次数
 	while (1) {
 #ifdef _WIN32
 		n = recv(fd, signals, sizeof(signals), 0);
@@ -155,6 +167,8 @@ evsig_cb(evutil_socket_t fd, short what, void *arg)
 			/* XXX warn? */
 			break;
 		}
+        // 遍历缓存中的每个字节，转换成信号值
+        // 如果信号值合法，则表示该信号发生一次，增加该信号发生次数
 		for (i = 0; i < n; ++i) {
 			ev_uint8_t sig = signals[i];
 			if (sig < NSIG)
@@ -163,6 +177,8 @@ evsig_cb(evutil_socket_t fd, short what, void *arg)
 	}
 
 	EVBASE_ACQUIRE_LOCK(base, th_base_lock);
+    // 遍历当前信号发生次数，激活与信号相关的事件，实际上是将
+    // 信号相关的回调函数插入到激活事件队列中
 	for (i = 0; i < NSIG; ++i) {
 		if (ncaught[i])
 			evmap_signal_active_(base, i, ncaught[i]);
@@ -170,6 +186,12 @@ evsig_cb(evutil_socket_t fd, short what, void *arg)
 	EVBASE_RELEASE_LOCK(base, th_base_lock);
 }
 
+// 初始化内部信号事件
+// 主要是将信号事件base->sig.ev_signal[0]绑定到base上，信号关联文件描述符；
+// base->sig.ev_signal_pair是文件描述符对，一个是用来读取数据的，一个是用来写数据的；
+// 其中base->sig.ev_signal_pair[0]，即用来读取信号的；
+// base->sig.ev_signal_pair[1]是用来写信号的，此处只是绑定0，因为这是信号接收端
+// 只有真有外部信号事件注册时，才会绑定base->sig.ev_signal_pair[0]
 int
 evsig_init_(struct event_base *base)
 {
@@ -178,6 +200,7 @@ evsig_init_(struct event_base *base)
 	 * pair to wake up our event loop.  The event loop then scans for
 	 * signals that got delivered.
 	 */
+    // 创建内部使用的通知管道，将创建好的文件描述符存在ev_signal_pair中
 	if (evutil_make_internal_pipe_(base->sig.ev_signal_pair) == -1) {
 #ifdef _WIN32
 		/* Make this nonfatal on win32, where sometimes people
@@ -189,18 +212,27 @@ evsig_init_(struct event_base *base)
 		return -1;
 	}
 
+    // 如果存在原有信号句柄则释放，并置空
 	if (base->sig.sh_old) {
 		mm_free(base->sig.sh_old);
 	}
 	base->sig.sh_old = NULL;
 	base->sig.sh_old_max = 0;
 
+    // 将信号事件base->sig.ev_signal绑定在base上，关联文件描述符base->sig.ev_signal_pair[0]，
+    // ev_signal_pair[0]是用来读的，事件类型是EV_READ|EV_PERSIST，包括可读和持久化，事件发生
+    // 时的回调函数是evsig_cb函数，回调函数的参数是base
+    // 这里就说明了，base->sig.ev_signal是内部事件，是用来外部信号发生时，通知内部信号处理函数的；
+    // 其实就是将外部信号转换为内部IO事件来处理
 	event_assign(&base->sig.ev_signal, base, base->sig.ev_signal_pair[0],
 		EV_READ | EV_PERSIST, evsig_cb, base);
 
+    // 设置信号事件的事件状态为EVLIST_INTERNAL，即内部事件
 	base->sig.ev_signal.ev_flags |= EVLIST_INTERNAL;
+    // 设置信号事件的优先级为0，即最高优先级，信号事件优先处理
 	event_priority_set(&base->sig.ev_signal, 0);
 
+    // 设置信号事件的后台处理方法
 	base->evsigsel = &evsigops;
 
 	return 0;
@@ -208,6 +240,9 @@ evsig_init_(struct event_base *base)
 
 /* Helper: set the signal handler for evsignal to handler in base, so that
  * we can restore the original handler when we clear the current one. */
+// 设置外部信号的捕捉处理句柄
+// 在event_base中为信号设置信号处理句柄，这样当清除当前信号时，
+// 就可以重新存储一般的信号处理句柄
 int
 evsig_set_handler_(struct event_base *base,
     int evsignal, void (__cdecl *handler)(int))
@@ -224,6 +259,9 @@ evsig_set_handler_(struct event_base *base,
 	 * resize saved signal handler array up to the highest signal number.
 	 * a dynamic array is used to keep footprint on the low side.
 	 */
+    // 重新调整信号句柄数组大小，以适应最大的信号值。
+    // 动态数组用来适应当前最大的信号值
+    // 一旦当前信号值大于原有最大信号值，则需要重新申请空间
 	if (evsignal >= sig->sh_old_max) {
 		int new_max = evsignal + 1;
 		event_debug(("%s: evsignal (%d) >= sh_old_max (%d), resizing",
@@ -242,6 +280,7 @@ evsig_set_handler_(struct event_base *base,
 	}
 
 	/* allocate space for previous handler out of dynamic array */
+    // 为新增的信号分配空间
 	sig->sh_old[evsignal] = mm_malloc(sizeof *sig->sh_old[evsignal]);
 	if (sig->sh_old[evsignal] == NULL) {
 		event_warn("malloc");
@@ -249,6 +288,8 @@ evsig_set_handler_(struct event_base *base,
 	}
 
 	/* save previous handler and setup new handler */
+    // 保存以前的信号句柄，并配置新的信号句柄
+    // 将新增信号和信号处理函数handler绑定到一起
 #ifdef EVENT__HAVE_SIGACTION
 	memset(&sa, 0, sizeof(sa));
 	sa.sa_handler = handler;
@@ -274,9 +315,20 @@ evsig_set_handler_(struct event_base *base,
 	return (0);
 }
 
+// 将信号事件注册到event_base上,同时将信号和捕捉信号的函数
+// 通过signal系统函数绑定到一起，一旦捕捉信号的函数捕捉到信号，
+// 则会将信号写入内部信号通知管道，然后会触发内部信号通知事件，
+// 内部信号通知事件会从内部信号通知管道读取信号，
+// 然后根据信号值，触发相应外部信号事件回调函数
+// base：绑定到哪个event_base上
+// evsignal：需要绑定的信号
+// old：该信号上的老的事件类型
+// events：该信号上当前的事件类型
+// p：目前尚未用到
 static int
 evsig_add(struct event_base *base, evutil_socket_t evsignal, short old, short events, void *p)
 {
+    // 这里实际上是内部信号通知事件，用于将外部信号转换为内部事件的具体实现
 	struct evsig_info *sig = &base->sig;
 	(void)p;
 
@@ -299,11 +351,16 @@ evsig_add(struct event_base *base, evutil_socket_t evsignal, short old, short ev
 	EVSIGBASE_UNLOCK();
 
 	event_debug(("%s: %d: changing signal handler", __func__, (int)evsignal));
+    // 将信号注册到信号捕捉函数evsig_handler上
+    // evsig_handler会捕捉信号，然后将信号写入base->sig.ev_signal_pair[1]，
+    // 用来通知内部管道，进而通知event_base处理
 	if (evsig_set_handler_(base, (int)evsignal, evsig_handler) == -1) {
 		goto err;
 	}
 
 
+    // 这里实际上是在添加外部信号事件时，会添加内部信号通知事件，
+    // 目的是为了将外部信号事件借助内部管道将捕捉到的外部信号转换为内部IO事件
 	if (!sig->ev_signal_added) {
 		if (event_add_nolock_(&sig->ev_signal, NULL, 0))
 			goto err;
@@ -373,6 +430,7 @@ evsig_del(struct event_base *base, evutil_socket_t evsignal, short old, short ev
 	return (evsig_restore_handler_(base, (int)evsignal));
 }
 
+// 信号捕捉函数
 static void __cdecl
 evsig_handler(int sig)
 {

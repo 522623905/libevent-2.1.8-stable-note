@@ -432,6 +432,7 @@ epoll_nochangelist_del(struct event_base *base, evutil_socket_t fd,
 	return epoll_apply_one_change(base, base->evbase, &ch);
 }
 
+// 后台方法的调度方法
 static int
 epoll_dispatch(struct event_base *base, struct timeval *tv)
 {
@@ -467,6 +468,8 @@ epoll_dispatch(struct event_base *base, struct timeval *tv)
 		}
 	} else
 #endif
+    // 如果存在超时事件，则将超时时间转换为毫秒时间
+    // 如果超时时间在合法范围之外，则设置超时时间为永久等待
 	if (tv != NULL) {
 		timeout = evutil_tv_to_msec_(tv);
 		if (timeout < 0 || timeout > MAX_EPOLL_TIMEOUT_MSEC) {
@@ -476,11 +479,13 @@ epoll_dispatch(struct event_base *base, struct timeval *tv)
 		}
 	}
 
+    // 将event_base中有改变的事件列表都根据事件类型应用到epoll的监听上；重新设置之后，则删除改变
 	epoll_apply_changes(base);
 	event_changelist_remove_all_(&base->changelist, base);
 
 	EVBASE_RELEASE_LOCK(base, th_base_lock);
 
+    // 等待事件触发，如果没有超时事件时（tv＝null）时，timeout＝－1，则为阻塞模式
 	res = epoll_wait(epollop->epfd, events, epollop->nevents, timeout);
 
 	EVBASE_ACQUIRE_LOCK(base, th_base_lock);
@@ -497,6 +502,7 @@ epoll_dispatch(struct event_base *base, struct timeval *tv)
 	event_debug(("%s: epoll_wait reports %d", __func__, res));
 	EVUTIL_ASSERT(res <= epollop->nevents);
 
+    // 根据epoll等待触发的事件列表激活事件
 	for (i = 0; i < res; i++) {
 		int what = events[i].events;
 		short ev = 0;
@@ -519,9 +525,12 @@ epoll_dispatch(struct event_base *base, struct timeval *tv)
 		if (!ev)
 			continue;
 
+        // 根据事件绑定的fd，事件类型以及触发方式激活事件
 		evmap_io_active_(base, events[i].data.fd, ev | EV_ET);
 	}
 
+    // 如果激活的事件个数等于epoll中事件总数，同时epoll中事件总数小于最大总数，
+    // 则需要创建新空间用来存储新事件，方法是每次创建的空间等于原来的2倍
 	if (res == epollop->nevents && epollop->nevents < MAX_NEVENT) {
 		/* We used all of the event space this time.  We should
 		   be ready for more events next time. */

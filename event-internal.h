@@ -187,6 +187,7 @@ struct event_signal_map {
  * events waiting for a timeout wait on a minheap.  Sometimes, however, a
  * queue can be faster.
  **/
+// 公用超时队列，处于同一个公用超时队列中的所有事件具有相同的超时控制
 struct common_timeout_list {
 	/* List of events currently waiting in the queue. */
 	struct event_list events;
@@ -401,8 +402,8 @@ struct event_base {
 	struct timeval max_dispatch_time;
     // 最大调度的回调函数个数
 	int max_dispatch_callbacks;
-    // 优先级设置之后，对于活跃队列中子队列个数的限制
-    // 但是当子队列个数超过这个限制之后，会以实际的回调函数个数为准
+    // 如果优先级 < limit_after_prio，即当事件优先级高于limit_after_prio时，是不需要查看新事件的；
+    // 如果优先级 >＝ limit_after_prio，即当事件优先级不高于limit_after_prio时，是需要根据maxcb以及end_time检查新事件；
 	int limit_callbacks_after_prio;
 
 	/* Notify main thread to wake up break, etc. */

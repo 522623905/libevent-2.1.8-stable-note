@@ -2597,6 +2597,7 @@ evutil_accept4_(evutil_socket_t sockfd, struct sockaddr *addr,
  * fd[0] get read from fd[1].  Make both fds nonblocking and close-on-exec.
  * Return 0 on success, -1 on failure.
  */
+// 创建内部使用的通知管道，用来作为外部信号捕捉函数与内部IO事件回调函数之间通知管道
 int
 evutil_make_internal_pipe_(evutil_socket_t fd[2])
 {
@@ -2610,10 +2611,13 @@ evutil_make_internal_pipe_(evutil_socket_t fd[2])
 	*/
 
 #if defined(EVENT__HAVE_PIPE2)
+    // O_CLOEXEC: 子进程默认是继承父进程打开的所有fd,如果句柄加入了这个设置,
+    // 在 execve替换进程时就会关闭设置这个选项的所有fd
 	if (pipe2(fd, O_NONBLOCK|O_CLOEXEC) == 0)
 		return 0;
 #endif
 #if defined(EVENT__HAVE_PIPE)
+    // 如果没有PIPE2，有PIPE，则使用PIPE接口创建
 	if (pipe(fd) == 0) {
 		if (evutil_fast_socket_nonblocking(fd[0]) < 0 ||
 		    evutil_fast_socket_nonblocking(fd[1]) < 0 ||
@@ -2635,6 +2639,7 @@ evutil_make_internal_pipe_(evutil_socket_t fd[2])
 #else
 #define LOCAL_SOCKETPAIR_AF AF_UNIX
 #endif
+    // 如果既没有PIPE2，也没有PIPE，则使用套接字
 	if (evutil_socketpair(LOCAL_SOCKETPAIR_AF, SOCK_STREAM, 0, fd) == 0) {
 		if (evutil_fast_socket_nonblocking(fd[0]) < 0 ||
 		    evutil_fast_socket_nonblocking(fd[1]) < 0 ||
