@@ -127,6 +127,7 @@ struct event_callback {
 	short evcb_flags;
     // 回调函数的优先级，越小优先级越高
     ev_uint8_t evcb_pri;	/* smaller numbers are higher priority */
+    // EV_CLOSURE_XXX对应不同的回调函数
 	ev_uint8_t evcb_closure;
 	/* allows us to adopt for different types of events */
     // 允许我们自动适配不同类型的回调事件

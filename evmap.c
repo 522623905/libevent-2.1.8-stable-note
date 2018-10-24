@@ -507,8 +507,7 @@ evmap_signal_add_(struct event_base *base, int sig, struct event *ev)
 	    base->evsigsel->fdinfo_len);
 
     // 如果此信号下映射的事件为空，则将信号与文件描述符注册到后台方法中
-    // evsel->add实际上调用的是base->evsigsel->add函数，查看evsig_init函数中初始化过程
-    // 得知，实际上调用的是evsig_add函数，这里就把外部信号添加到信号捕捉函数中了
+    // evsel->add实际上调用的是evsig_add函数，这里就把外部信号添加到信号捕捉函数中了
 	if (LIST_EMPTY(&ctx->events)) {
 		if (evsel->add(base, ev->ev_fd, 0, EV_SIGNAL, NULL)
 		    == -1)
@@ -548,6 +547,9 @@ evmap_signal_del_(struct event_base *base, int sig, struct event *ev)
 	return (1);
 }
 
+// 激活信号event
+// 实际上是将信号相关的回调函数插入到激活事件队列中
+// sig、ncalls分别是信号值和发生的次数
 void
 evmap_signal_active_(struct event_base *base, evutil_socket_t sig, int ncalls)
 {
@@ -557,10 +559,12 @@ evmap_signal_active_(struct event_base *base, evutil_socket_t sig, int ncalls)
 
 	if (sig < 0 || sig >= map->nentries)
 		return;
+    // 通过这个sig找到对应的TAILQ_HEAD
 	GET_SIGNAL_SLOT(ctx, map, sig, evmap_signal);
 
 	if (!ctx)
 		return;
+    // 遍历该sig的队列,激活信号事件,将事件的回调函数放入激活队列
 	LIST_FOREACH(ev, &ctx->events, ev_signal_next)
 		event_active_nolock_(ev, EV_SIGNAL, ncalls);
 }

@@ -467,6 +467,7 @@ event_callback_to_event(struct event_callback *evcb)
 	return EVUTIL_UPCAST(evcb, struct event, ev_evcallback);
 }
 
+// 获取event对应的回调函数
 static inline struct event_callback *
 event_to_event_callback(struct event *ev)
 {
@@ -708,7 +709,7 @@ event_base_new_with_config(const struct event_config *cfg)
 		base->evbase = base->evsel->init(base);
 	}
 
-    // 如果遍历一遍没有发现合适的后台方法，就报错退出，退出前释放资源
+        // 如果遍历一遍没有发现合适的后台方法，就报错退出，退出前释放资源
 	if (base->evbase == NULL) {
 		event_warnx("%s: no event mechanism available",
 		    __func__);
@@ -717,12 +718,12 @@ event_base_new_with_config(const struct event_config *cfg)
 		return NULL;
 	}
 
-    // 获取环境变量EVENT_SHOW_METHOD，是否打印输出选择的后台方法名字
+        // 获取环境变量EVENT_SHOW_METHOD，是否打印输出选择的后台方法名字
 	if (evutil_getenv_("EVENT_SHOW_METHOD"))
 		event_msgx("libevent using: %s", base->evsel->name);
 
 	/* allocate a single active event queue */
-    // 分配的优先级队列成员个数为1
+        // 分配的优先级队列成员个数为1
 	if (event_base_priority_init(base, 1) < 0) {
 		event_base_free(base);
 		return NULL;
@@ -1294,6 +1295,7 @@ event_priority_init(int npriorities)
 	return event_base_priority_init(current_base, npriorities);
 }
 
+// 设置event_base的优先级个数,并分配base->activequeues
 int
 event_base_priority_init(struct event_base *base, int npriorities)
 {
@@ -1302,19 +1304,25 @@ event_base_priority_init(struct event_base *base, int npriorities)
 
 	EVBASE_ACQUIRE_LOCK(base, th_base_lock);
 
+        // 由N_ACTIVE_CALLBACKS宏可以知道，本函数应该要在event_base_dispatch
+        // 函数调用前调用,且优先级个数，要小于EVENT_MAX_PRIORITIES,不然将无法设置
 	if (N_ACTIVE_CALLBACKS(base) || npriorities < 1
 	    || npriorities >= EVENT_MAX_PRIORITIES)
 		goto err;
 
+        // 之前和现在要设置的优先级数是一样的
 	if (npriorities == base->nactivequeues)
 		goto ok;
 
+        // 释放之前的，因为N_ACTIVE_CALLBACKS,所以没有active的event。
+        // 可以随便mm_free
 	if (base->nactivequeues) {
 		mm_free(base->activequeues);
 		base->nactivequeues = 0;
 	}
 
 	/* Allocate our priority queues */
+        // 分配一个优先级数组
 	base->activequeues = (struct evcallback_list *)
 	  mm_calloc(npriorities, sizeof(struct evcallback_list));
 	if (base->activequeues == NULL) {
@@ -1420,6 +1428,7 @@ event_signal_closure(struct event_base *base, struct event *ev)
 	ncalls = ev->ev_ncalls;
 	if (ncalls != 0)
 		ev->ev_pncalls = &ncalls;
+        // while循环里面会调用用户设置的回调函数可能会执行很久,所以要解锁先.
 	EVBASE_RELEASE_LOCK(base, th_base_lock);
         // 根据事件调用次数循环调用信号事件回调函数
 	while (ncalls) {
@@ -1430,6 +1439,7 @@ event_signal_closure(struct event_base *base, struct event *ev)
 		(*ev->ev_callback)(ev->ev_fd, ev->ev_res, ev->ev_arg);
 
 		EVBASE_ACQUIRE_LOCK(base, th_base_lock);
+                // 如果其他线程调用event_base_loopbreak函数，则中断之
 		should_break = base->event_break;
 		EVBASE_RELEASE_LOCK(base, th_base_lock);
 
@@ -1749,7 +1759,7 @@ event_process_active_single_queue(struct event_base *base,
 		if (!(evcb->evcb_flags & EVLIST_INTERNAL))
 			++count;
 
-                // 设置当前的事件
+                // 设置当前执行的回调函数
 		base->current_event = evcb;
 #ifndef EVENT__DISABLE_THREAD_SUPPORT
 		base->current_event_waiters = 0;
@@ -1840,7 +1850,7 @@ event_process_active_single_queue(struct event_base *base,
  * process before higher priorities.  Low priority events can starve high
  * priority ones.
  */
-// 激活存储在优先级队列中的事件；表示优先级的数字越小，优先级越高；
+// 处理存储在活跃的优先级队列中的事件；表示优先级的数字越小，优先级越高；
 // 优先级高的事件可能会一直阻塞,低优先级事件运行；
 static int
 event_process_active(struct event_base *base)
@@ -1866,13 +1876,14 @@ event_process_active(struct event_base *base)
 		endtime = NULL;
 	}
 
-        // 如果base中激活队列不为空，则根据优先级遍历激活队列；
+        // 如果base中激活队列不为空，则根据从高到低的优先级遍历激活队列；
         // 遍历每一个优先级子队列，处理子队列中回调函数；
         // 在执行时，需要根据limit_after_prio设置两次检查新事件之间的间隔；
         // 如果优先级 < limit_after_prio，即当事件优先级高于limit_after_prio时，是不需要查看新事件的；
         // 如果优先级 >＝ limit_after_prio，即当事件优先级不高于limit_after_prio时，是需要根据maxcb以及end_time检查新事件；
         for (i = 0; i < base->nactivequeues; ++i) {
 		if (TAILQ_FIRST(&base->activequeues[i]) != NULL) {
+                        // 设置当前运行的callback的优先级别
 			base->event_running_priority = i;
 			activeq = &base->activequeues[i];
 			if (i < limit_after_prio)
@@ -2249,21 +2260,21 @@ event_assign(struct event *ev, struct event_base *base, evutil_socket_t fd, shor
 	ev->ev_ncalls = 0;
 	ev->ev_pncalls = NULL;
 
-    // 如果是信号事件
+        // 如果是信号事件
 	if (events & EV_SIGNAL) {
-        // 信号事件与IO事件不能同时存在
+                // 信号事件与IO事件不能同时存在
 		if ((events & (EV_READ|EV_WRITE|EV_CLOSED)) != 0) {
 			event_warnx("%s: EV_SIGNAL is not compatible with "
 			    "EV_READ, EV_WRITE or EV_CLOSED", __func__);
 			return -1;
 		}
-        // 设置事件关闭时执行回调函数的类型：evcb_callback
+                // 设置事件关闭时执行回调函数的类型：evcb_callback
 		ev->ev_closure = EV_CLOSURE_EVENT_SIGNAL;
 	} else {
-        // 如果是其它类型的事件：IO事件、定时事件
+                // 如果是其它类型的事件：IO事件、定时事件
 
-        // 如果事件是永久事件，即每次调用之后不会移除出事件列表
-        // 清空IO超时控制，并设置事件关闭时回调函数类型：evcb_callback
+                // 如果事件是永久事件，即每次调用之后不会移除出事件列表
+                // 清空IO超时控制，并设置事件关闭时回调函数类型：evcb_callback
 		if (events & EV_PERSIST) {
 			evutil_timerclear(&ev->ev_io_timeout);
 			ev->ev_closure = EV_CLOSURE_EVENT_PERSIST;
@@ -2272,10 +2283,10 @@ event_assign(struct event *ev, struct event_base *base, evutil_socket_t fd, shor
 		}
 	}
 
-    // 事件超时控制最小堆初始化
+        // 事件超时控制最小堆初始化
 	min_heap_elem_init_(ev);
 
-    // 默认情况下，事件优先级设置为中间优先级
+        // 默认情况下，事件优先级设置为优先级数组长度的一半，即中间优先级
 	if (base != NULL) {
 		/* by default, we put new events into the middle priority */
 		ev->ev_pri = base->nactivequeues / 2;
@@ -2484,14 +2495,17 @@ event_callback_finalize_many_(struct event_base *base, int n_cbs, struct event_c
  * Set's the priority of an event - if an event is already scheduled
  * changing the priority is going to fail.
  */
-
+// 设置event的优先级
 int
 event_priority_set(struct event *ev, int pri)
 {
 	event_debug_assert_is_setup_(ev);
 
+        // 当event的状态是EVLIST_ACTIVE时，就不能对这个event进行优先级设置了
+        // 因此需要在调用event_base_dispatch函数之前使用
 	if (ev->ev_flags & EVLIST_ACTIVE)
 		return (-1);
+        // 优先级不能越界
 	if (pri < 0 || pri >= ev->ev_base->nactivequeues)
 		return (-1);
 
@@ -2646,17 +2660,21 @@ event_add(struct event *ev, const struct timeval *tv)
  * works by writing a byte to one end of a socketpair, so that the event_base
  * listening on the other end will wake up as the corresponding event
  * triggers */
+// 往管道写入一个字节唤醒主线程
 static int
 evthread_notify_base_default(struct event_base *base)
 {
 	char buf[1];
 	int r;
 	buf[0] = (char) 0;
+        // 写一个字节通知一下，用来唤醒
 #ifdef _WIN32
 	r = send(base->th_notify_fd[1], buf, 1, 0);
 #else
 	r = write(base->th_notify_fd[1], buf, 1);
 #endif
+        // 即使errno 等于 EAGAIN也无所谓，因为这是由于通信通道已经塞满了
+        // 这已经能唤醒主线程了。没必要一定要再写入一个字节
 	return (r < 0 && ! EVUTIL_ERR_IS_EAGAIN(errno)) ? -1 : 0;
 }
 
@@ -2680,14 +2698,19 @@ evthread_notify_base_eventfd(struct event_base *base)
 /** Tell the thread currently running the event_loop for base (if any) that it
  * needs to stop waiting in its dispatch function (if it is) and process all
  * active callbacks. */
+// 唤醒主线程，base->th_notify_fn完成实际的通知操作
 static int
 evthread_notify_base(struct event_base *base)
 {
+        // 确保已经加锁了
 	EVENT_BASE_ASSERT_LOCKED(base);
 	if (!base->th_notify_fn)
 		return -1;
+        // 写入一个字节，就能使event_base被唤醒。
+        // 如果处于未决状态，就没必要写多一个字节
 	if (base->is_notify_pending)
 		return 0;
+        // 通知处于未决状态，当event_base醒过来就变成已决的了
 	base->is_notify_pending = 1;
 	return base->th_notify_fn(base);
 }
@@ -3132,7 +3155,7 @@ event_active_nolock_(struct event *ev, int res, short ncalls)
 		return;
 	}
 
-        // 根据激活的事件类型
+        // 记录当前激活事件的类型
 	switch ((ev->ev_flags & (EVLIST_ACTIVE|EVLIST_ACTIVE_LATER))) {
 	default:
 	case EVLIST_ACTIVE|EVLIST_ACTIVE_LATER:
@@ -3150,6 +3173,7 @@ event_active_nolock_(struct event *ev, int res, short ncalls)
 		break;
 	}
 
+        // 这将停止处理低优先级的event。一路回退到event_base_loop中
 	if (ev->ev_pri < base->event_running_priority)
 		base->event_continue = 1;
 
@@ -3159,6 +3183,7 @@ event_active_nolock_(struct event *ev, int res, short ncalls)
 		if (base->current_event == event_to_event_callback(ev) &&
 		    !EVBASE_IN_THREAD(base)) {
 			++base->current_event_waiters;
+                        //由于此时是主线程执行，所以并不会进行这个判断里面
 			EVTHREAD_COND_WAIT(base->current_event_cond, base->th_base_lock);
 		}
 #endif
@@ -3837,11 +3862,14 @@ evthread_notify_drain_eventfd(evutil_socket_t fd, short what, void *arg)
 }
 #endif
 
+// 唤醒event后要执行的回调函数,
+// 读取完管道里的所有数据，免得被多路IO复用函数检测到管道可读，而再次被唤醒
 static void
 evthread_notify_drain_default(evutil_socket_t fd, short what, void *arg)
 {
 	unsigned char buf[1024];
 	struct event_base *base = arg;
+        // 读完fd的所有数据，免得再次被唤醒
 #ifdef _WIN32
 	while (recv(fd, (char*)buf, sizeof(buf), 0) > 0)
 		;
@@ -3851,6 +3879,7 @@ evthread_notify_drain_default(evutil_socket_t fd, short what, void *arg)
 #endif
 
 	EVBASE_ACQUIRE_LOCK(base, th_base_lock);
+        //修改is_notify_pending,使得其不再是未决的了,也能让其他线程可以再次唤醒值
 	base->is_notify_pending = 0;
 	EVBASE_RELEASE_LOCK(base, th_base_lock);
 }
@@ -3868,6 +3897,8 @@ evthread_make_base_notifiable(struct event_base *base)
 	return r;
 }
 
+// 从eventfd、pipe和socketpair中选择一种唤醒机制
+// 首先创建一个文件描述符fd，然后用这个fd创建一个event，最后添加到event_base中
 static int
 evthread_make_base_notifiable_nolock_(struct event_base *base)
 {
@@ -3887,7 +3918,7 @@ evthread_make_base_notifiable_nolock_(struct event_base *base)
 		return 0;
 	}
 #endif
-
+       // 创建eventfd或者pipefd，设置event回调函数和通知函数
 #ifdef EVENT__HAVE_EVENTFD
 	base->th_notify_fd[0] = evutil_eventfd_(0,
 	    EVUTIL_EFD_CLOEXEC|EVUTIL_EFD_NONBLOCK);
@@ -3907,13 +3938,16 @@ evthread_make_base_notifiable_nolock_(struct event_base *base)
 	base->th_notify_fn = notify;
 
 	/* prepare an event that we can use for wakeup */
+        // 把th_notify事件结构体以添加到event_base中去关注
 	event_assign(&base->th_notify, base, base->th_notify_fd[0],
 				 EV_READ|EV_PERSIST, cb, base);
 
 	/* we need to mark this as internal event */
+        // 标明是内部使用的,设置最高优先级
 	base->th_notify.ev_flags |= EVLIST_INTERNAL;
 	event_priority_set(&base->th_notify, 0);
 
+        // 此函数真正实现将事件添加到event_base的等待列表中
 	return event_add_nolock_(&base->th_notify, NULL, 0);
 }
 

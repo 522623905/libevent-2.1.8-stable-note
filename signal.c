@@ -111,7 +111,7 @@ static struct event_base *evsig_base = NULL;
 /* A copy of evsig_base->sigev_n_signals_added. */
 // 当前event_base中增加的信号事件的总数
 static int evsig_base_n_signals_added = 0;
-// 一个是信号事件的文件描述符,base->sig.ev_signal_pair[1]，即用来写入信号的内部管道
+// 信号事件的文件描述符,base->sig.ev_signal_pair[1]，即用来写入信号的内部管道
 static evutil_socket_t evsig_base_fd = -1;
 
 static void __cdecl evsig_handler(int sig);
@@ -130,7 +130,7 @@ evsig_set_base_(struct event_base *base)
 }
 
 /* Callback for when the signal handler write a byte to our signaling socket */
-// 当信号句柄往信号处理socket中写入字节时的回调函数
+// 当信号句柄往信号处理管道中写入字节时的event_base返回可读事件后的回调函数
 // arg一般是event_base句柄
 // 每当注册信号发生时，就会将该信号绑定的回调函数插入到激活队列中
 static void
@@ -150,8 +150,9 @@ evsig_cb(evutil_socket_t fd, short what, void *arg)
     // 清空存储捕捉信号的缓存
 	memset(&ncaught, 0, sizeof(ncaught));
 
-    // 循环读取信号管道中的信号，直到读完或者无法读取为止。
-    // 并将读取的信号，并记录信号发生的次数
+    // 循环读取信号管道socketpair中的数据，直到读完或者无法读取为止。
+    // 读到的数据即是信号，并记录该信号发生的次数
+    // 管道的读端注意是非阻塞的
 	while (1) {
 #ifdef _WIN32
 		n = recv(fd, signals, sizeof(signals), 0);
@@ -167,7 +168,7 @@ evsig_cb(evutil_socket_t fd, short what, void *arg)
 			/* XXX warn? */
 			break;
 		}
-        // 遍历缓存中的每个字节，转换成信号值
+        // 遍历缓存中的每个字节，即信号值
         // 如果信号值合法，则表示该信号发生一次，增加该信号发生次数
 		for (i = 0; i < n; ++i) {
 			ev_uint8_t sig = signals[i];
@@ -177,8 +178,8 @@ evsig_cb(evutil_socket_t fd, short what, void *arg)
 	}
 
 	EVBASE_ACQUIRE_LOCK(base, th_base_lock);
-    // 遍历当前信号发生次数，激活与信号相关的事件，实际上是将
-    // 信号相关的回调函数插入到激活事件队列中
+    // 遍历当前信号发生次数，激活与信号相关的事件，
+    // 实际上是将信号相关的回调函数插入到激活事件队列中
 	for (i = 0; i < NSIG; ++i) {
 		if (ncaught[i])
 			evmap_signal_active_(base, i, ncaught[i]);
@@ -241,8 +242,8 @@ evsig_init_(struct event_base *base)
 /* Helper: set the signal handler for evsignal to handler in base, so that
  * we can restore the original handler when we clear the current one. */
 // 设置外部信号的捕捉处理句柄
-// 在event_base中为信号设置信号处理句柄，这样当清除当前信号时，
-// 就可以重新存储一般的信号处理句柄
+// 在event_base中为信号设置信号处理句柄handler，
+// 并保存旧的handler到sig->sh_old,这样当清除当前信号时，就可以重新存储一般的信号处理句柄
 int
 evsig_set_handler_(struct event_base *base,
     int evsignal, void (__cdecl *handler)(int))
@@ -260,7 +261,6 @@ evsig_set_handler_(struct event_base *base,
 	 * a dynamic array is used to keep footprint on the low side.
 	 */
     // 重新调整信号句柄数组大小，以适应最大的信号值。
-    // 动态数组用来适应当前最大的信号值
     // 一旦当前信号值大于原有最大信号值，则需要重新申请空间
 	if (evsignal >= sig->sh_old_max) {
 		int new_max = evsignal + 1;
@@ -281,6 +281,7 @@ evsig_set_handler_(struct event_base *base,
 
 	/* allocate space for previous handler out of dynamic array */
     // 为新增的信号分配空间
+    //注意sh_old是一个二级指针。元素是一个一级指针。为这个一级指针分配内存
 	sig->sh_old[evsignal] = mm_malloc(sizeof *sig->sh_old[evsignal]);
 	if (sig->sh_old[evsignal] == NULL) {
 		event_warn("malloc");
@@ -296,6 +297,7 @@ evsig_set_handler_(struct event_base *base,
 	sa.sa_flags |= SA_RESTART;
 	sigfillset(&sa.sa_mask);
 
+    //设置信号处理函数
 	if (sigaction(evsignal, &sa, sig->sh_old[evsignal]) == -1) {
 		event_warn("sigaction");
 		mm_free(sig->sh_old[evsignal]);
@@ -332,10 +334,12 @@ evsig_add(struct event_base *base, evutil_socket_t evsignal, short old, short ev
 	struct evsig_info *sig = &base->sig;
 	(void)p;
 
+    // NSIG是信号的个数。定义在系统头文件中
 	EVUTIL_ASSERT(evsignal >= 0 && evsignal < NSIG);
 
 	/* catch signals if they happen quickly */
 	EVSIGBASE_LOCK();
+    // 如果有多个event_base，那么捕抓信号这个工作只能由其中一个完成
 	if (evsig_base != base && evsig_base_n_signals_added) {
 		event_warnx("Added a signal to event base %p with signals "
 		    "already added to event_base %p.  Only one can have "
@@ -457,6 +461,7 @@ evsig_handler(int sig)
 	send(evsig_base_fd, (char*)&msg, 1, 0);
 #else
 	{
+        // 往管道写入该信号值，则event_base被唤醒，监听到对端可读，并判断是哪个信号发生
 		int r = write(evsig_base_fd, (char*)&msg, 1);
 		(void)r; /* Suppress 'unused return value' and 'unused var' */
 	}

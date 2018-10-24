@@ -50,6 +50,7 @@ extern "C" {
 #define ev_io_timeout	ev_.ev_io.ev_timeout
 
 /* used only by signals */
+// 事件需要激活的次数
 #define ev_ncalls	ev_.ev_signal.ev_ncalls
 #define ev_pncalls	ev_.ev_signal.ev_pncalls
 
@@ -66,6 +67,7 @@ extern "C" {
     @{
  */
 /** A regular event. Uses the evcb_callback callback */
+// 具体参见event_process_active_single_queue()函数switch..case..
 // 常规事件，使用evcb_callback回调
 #define EV_CLOSURE_EVENT 0
 /** A signal event. Uses the evcb_callback callback */
@@ -314,10 +316,10 @@ struct event_base {
 	 * priority numbers are more important, and stall higher ones.
 	 */
     // 存储激活事件的event_callbacks的队列，这些event_callbacks都需要调用；
-    // 数字越小优先级越高
+    // 是一个数组，每个元素是一个激活队列，有nactivequeues个激活队列,不同的队列有不同的优先级,数字越小优先级越高
 	struct evcallback_list *activequeues;
 	/** The length of the activequeues array */
-    // 活跃队列的长度
+    // 活跃队列的长度,即activequeues数组元素个数(每个元素是队列)
 	int nactivequeues;
 	/** A list of event_callbacks that should become active the next time
 	 * we process events, but not this time. */
@@ -410,6 +412,7 @@ struct event_base {
 	/** True if the base already has a pending notify, and we don't need
 	 * to add any more. */
     // 如果event_base已经有关于未决事件的通知，那么我们就不需要再次添加了
+    // 表示即子线程已经通知了，但主线程还没处理这个通知
 	int is_notify_pending;
 	/** A socketpair used by some th_notify functions to wake up the main
 	 * thread. */
@@ -418,9 +421,10 @@ struct event_base {
 	/** An event used by some th_notify functions to wake up the main
 	 * thread. */
     // 用于th_notify函数唤醒主线程的事件
+    // 用于监听th_notify_fd的读端
 	struct event th_notify;
 	/** A function used to wake up the main thread from another thread. */
-    // 用于从其他线程唤醒主线程的函数
+    // 用于从其他线程唤醒主线程的函数,evthread_make_base_notifiable_nolock_()中指定
 	int (*th_notify_fn)(struct event_base *base);
 
 	/** Saved seed for weak random number generator. Some backends use
