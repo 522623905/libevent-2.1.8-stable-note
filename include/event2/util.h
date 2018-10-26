@@ -113,6 +113,9 @@ extern "C" {
  *
  * @{
  */
+
+// 以下定义了一些通用的位宽确定的整数类型
+
 #ifdef EVENT__HAVE_UINT64_T
 #define ev_uint64_t uint64_t
 #define ev_int64_t int64_t
@@ -238,6 +241,7 @@ extern "C" {
 
    @{
 */
+// 定义了各个类型的max和min值
 #ifndef EVENT__HAVE_STDINT_H
 #define EV_UINT64_MAX ((((ev_uint64_t)0xffffffffUL) << 32) | 0xffffffffUL)
 #define EV_INT64_MAX  ((((ev_int64_t) 0x7fffffffL) << 32) | 0xffffffffL)
@@ -512,6 +516,7 @@ const char *evutil_socket_error_to_string(int errcode);
  * @{
  */
 #ifdef EVENT__HAVE_TIMERADD
+// 两个struct timeval相加、相减，存到vvp中
 #define evutil_timeradd(tvp, uvp, vvp) timeradd((tvp), (uvp), (vvp))
 #define evutil_timersub(tvp, uvp, vvp) timersub((tvp), (uvp), (vvp))
 #else
@@ -536,6 +541,7 @@ const char *evutil_socket_error_to_string(int errcode);
 #endif /* !EVENT__HAVE_TIMERADD */
 
 #ifdef EVENT__HAVE_TIMERCLEAR
+// struct timeval清零
 #define evutil_timerclear(tvp) timerclear(tvp)
 #else
 #define	evutil_timerclear(tvp)	(tvp)->tv_sec = (tvp)->tv_usec = 0
@@ -544,6 +550,7 @@ const char *evutil_socket_error_to_string(int errcode);
 
 /** Return true iff the tvp is related to uvp according to the relational
  * operator cmp.  Recognized values for cmp are ==, <=, <, >=, and >. */
+// 两个struct timeval的比较，操作符是cmp
 #define	evutil_timercmp(tvp, uvp, cmp)					\
 	(((tvp)->tv_sec == (uvp)->tv_sec) ?				\
 	 ((tvp)->tv_usec cmp (uvp)->tv_usec) :				\
@@ -556,9 +563,12 @@ const char *evutil_socket_error_to_string(int errcode);
 #endif
 
 /** Replacement for offsetof on platforms that don't define it. */
+// 求结构体成员在结构体中的偏移量,type表示结构体名称，field表示成员名称
 #ifdef offsetof
 #define evutil_offsetof(type, field) offsetof(type, field)
 #else
+// 它用(type*)0来让编译器认为有个结构体，它的起始地址为0。
+// 这样，编译器给field所在的地址就是编译器给field安排的偏移量
 #define evutil_offsetof(type, field) ((off_t)(&((type *)0)->field))
 #endif
 

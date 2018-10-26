@@ -60,7 +60,7 @@ extern "C" {
 #define EVLIST_INSERTED	    0x02
 // 目前未使用
 #define EVLIST_SIGNAL	    0x04
-// 事件在激活链表中
+// 事件在激活链表中(如果event监听的事件发生了或者超时了，处于激活状态)
 #define EVLIST_ACTIVE	    0x08
 // 内部使用标记
 #define EVLIST_INTERNAL	    0x10
@@ -68,7 +68,7 @@ extern "C" {
 #define EVLIST_ACTIVE_LATER 0x20
 // 事件已经终止
 #define EVLIST_FINALIZING   0x40
-// 事件初始化完成，但是哪儿都不在
+// 事件初始化完成(用event_new创建的even都是处于已初始化状态的)
 #define EVLIST_INIT	    0x80
 // 包含所有事件状态，用于判断合法性的
 #define EVLIST_ALL          0xff
@@ -212,7 +212,7 @@ struct event {
 	short ev_events;
     // 记录当前激活事件的类型
 	short ev_res;		/* result passed to event callback */
-    // 保存事件的超时时间
+    // 保存事件的绝对超时时间
 	struct timeval ev_timeout;
 };
 

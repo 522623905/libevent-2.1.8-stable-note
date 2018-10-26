@@ -250,6 +250,9 @@ void evutil_rtrim_lws_(char *);
 	...
     }
  */
+// 通过成员变量的地址获取其所在的结构体变量地址
+// 成员变量的地址减去其本身相对于所在结构体的偏移量就是所在结构体的起始地址了，
+// 再将这个地址强制转换成即可
 #define EVUTIL_UPCAST(ptr, type, field)				\
 	((type *)(((char*)(ptr)) - evutil_offsetof(type, field)))
 

@@ -432,7 +432,7 @@ epoll_nochangelist_del(struct event_base *base, evutil_socket_t fd,
 	return epoll_apply_one_change(base, base->evbase, &ch);
 }
 
-// 后台方法的调度方法
+// 后台方法的调度方法,超时tv
 static int
 epoll_dispatch(struct event_base *base, struct timeval *tv)
 {

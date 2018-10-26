@@ -73,12 +73,19 @@ struct evconnlistener_ops {
 };
 
 struct evconnlistener {
+    // 操作函数
 	const struct evconnlistener_ops *ops;
+    // 锁变量，用于线程安全
 	void *lock;
+    // 用户的回调函数
 	evconnlistener_cb cb;
+    // 发生错误时的回调函数
 	evconnlistener_errorcb errorcb;
+    // 回调函数的参数
 	void *user_data;
+    // 属性标志
 	unsigned flags;
+    // 引用计数
 	short refcnt;
 	int accept4_flags;
 	unsigned enabled : 1;
@@ -86,6 +93,9 @@ struct evconnlistener {
 
 struct evconnlistener_event {
 	struct evconnlistener base;
+    // 内部event,插入到event_base
+    // 在实现时必然是将服务器端的socket fd赋值给struct event 类型变量listener的fd成员。
+    // 然后将listener加入到event_base，这样就完成了自动监听工作
 	struct event listener;
 };
 
@@ -130,8 +140,10 @@ listener_decref_and_unlock(struct evconnlistener *listener)
 {
 	int refcnt = --listener->refcnt;
 	if (refcnt == 0) {
+        // 实际调用event_listener_destroy
 		listener->ops->destroy(listener);
 		UNLOCK(listener);
+        // 释放锁
 		EVTHREAD_FREE_LOCK(listener->lock, EVTHREAD_LOCKTYPE_RECURSIVE);
 		mm_free(listener);
 		return 1;
@@ -141,6 +153,7 @@ listener_decref_and_unlock(struct evconnlistener *listener)
 	}
 }
 
+// 一系列的evconnlistener工作函数
 static const struct evconnlistener_ops evconnlistener_event_ops = {
 	event_listener_enable,
 	event_listener_disable,
@@ -193,19 +206,24 @@ evconnlistener_new(struct event_base *base,
 	if (flags & LEV_OPT_CLOSE_ON_EXEC)
 		lev->base.accept4_flags |= EVUTIL_SOCK_CLOEXEC;
 
+    // 线程安全就需要分配锁
 	if (flags & LEV_OPT_THREADSAFE) {
 		EVTHREAD_ALLOC_LOCK(lev->base.lock, EVTHREAD_LOCKTYPE_RECURSIVE);
 	}
 
+    // 在多路IO复用函数中，新客户端的连接请求也被当作读事件
 	event_assign(&lev->listener, base, fd, EV_READ|EV_PERSIST,
 	    listener_read_cb, lev);
 
+    // 会调用event_add，把event加入到event_base中
 	if (!(flags & LEV_OPT_DISABLED))
 	    evconnlistener_enable(&lev->base);
 
 	return &lev->base;
 }
 
+// 申请一个socket，然后对之进行一些有关非阻塞、重用、保持连接的处理、绑定到特定的IP和端口。
+// 最后把业务逻辑交给evconnlistener_new处理
 struct evconnlistener *
 evconnlistener_new_bind(struct event_base *base, evconnlistener_cb cb,
     void *ptr, unsigned flags, int backlog, const struct sockaddr *sa,
@@ -217,6 +235,7 @@ evconnlistener_new_bind(struct event_base *base, evconnlistener_cb cb,
 	int family = sa ? sa->sa_family : AF_UNSPEC;
 	int socktype = SOCK_STREAM | EVUTIL_SOCK_NONBLOCK;
 
+    // 监听个数不能为0
 	if (backlog == 0)
 		return NULL;
 
@@ -260,6 +279,7 @@ err:
 	return NULL;
 }
 
+// 释放一个evconnlistener
 void
 evconnlistener_free(struct evconnlistener *lev)
 {
@@ -268,6 +288,7 @@ evconnlistener_free(struct evconnlistener *lev)
 	lev->errorcb = NULL;
 	if (lev->ops->shutdown)
 		lev->ops->shutdown(lev);
+    // 引用次数减一，并解锁
 	listener_decref_and_unlock(lev);
 }
 
@@ -277,7 +298,9 @@ event_listener_destroy(struct evconnlistener *lev)
 	struct evconnlistener_event *lev_e =
 	    EVUTIL_UPCAST(lev, struct evconnlistener_event, base);
 
+    // 把event从event_base中删除
 	event_del(&lev_e->listener);
+    // 如果用户设置了这个选项，那么要关闭服务器端的监听socket
 	if (lev->flags & LEV_OPT_CLOSE_ON_FREE)
 		evutil_closesocket(event_get_fd(&lev_e->listener));
 	event_debug_unassign(&lev_e->listener);
@@ -289,6 +312,7 @@ evconnlistener_enable(struct evconnlistener *lev)
 	int r;
 	LOCK(lev);
 	lev->enabled = 1;
+    // 实际上是调用下面的event_listener_enable函数
 	if (lev->cb)
 		r = lev->ops->enable(lev);
 	else
@@ -313,6 +337,7 @@ event_listener_enable(struct evconnlistener *lev)
 {
 	struct evconnlistener_event *lev_e =
 	    EVUTIL_UPCAST(lev, struct evconnlistener_event, base);
+    // event加入到event_base，完成监听工作
 	return event_add(&lev_e->listener, NULL);
 }
 
@@ -375,6 +400,7 @@ evconnlistener_set_cb(struct evconnlistener *lev,
 	UNLOCK(lev);
 }
 
+// 设置连接监听器的错误监听函数
 void
 evconnlistener_set_error_cb(struct evconnlistener *lev,
     evconnlistener_errorcb errorcb)
@@ -384,6 +410,7 @@ evconnlistener_set_error_cb(struct evconnlistener *lev,
 	UNLOCK(lev);
 }
 
+// listen callback: accept客户端，然后调用用户设置的回调函数
 static void
 listener_read_cb(evutil_socket_t fd, short what, void *p)
 {
@@ -393,6 +420,7 @@ listener_read_cb(evutil_socket_t fd, short what, void *p)
 	evconnlistener_errorcb errorcb;
 	void *user_data;
 	LOCK(lev);
+    // 可能有多个客户端同时请求连接
 	while (1) {
 		struct sockaddr_storage ss;
 		ev_socklen_t socklen = sizeof(ss);
@@ -406,6 +434,7 @@ listener_read_cb(evutil_socket_t fd, short what, void *p)
 			continue;
 		}
 
+        // 用户还没设置连接监听器的回调函数，则断开连接
 		if (lev->cb == NULL) {
 			evutil_closesocket(new_fd);
 			UNLOCK(lev);
@@ -415,9 +444,14 @@ listener_read_cb(evutil_socket_t fd, short what, void *p)
 		cb = lev->cb;
 		user_data = lev->user_data;
 		UNLOCK(lev);
+        // 调用用户设置的回调函数，让用户处理这个fd
 		cb(lev, new_fd, (struct sockaddr*)&ss, (int)socklen,
 		    user_data);
 		LOCK(lev);
+        // 由于refcnt被初始化为1.而前面又++了，所以一般情况下并不会进入下面的
+        // if判断里面。但如果线程在上面那个UNLOCK之后，第二个线程调用evconnlistener_free
+        // 释放这个evconnlistener时，就有可能使得refcnt为1了。即进入那个判断体里
+        // 执行listener_decref_and_unlock
 		if (lev->refcnt == 1) {
 			int freed = listener_decref_and_unlock(lev);
 			EVUTIL_ASSERT(freed);
@@ -428,10 +462,12 @@ listener_read_cb(evutil_socket_t fd, short what, void *p)
 		--lev->refcnt;
 	}
 	err = evutil_socket_geterror(fd);
+    // 还可以accept
 	if (EVUTIL_ERR_ACCEPT_RETRIABLE(err)) {
 		UNLOCK(lev);
 		return;
 	}
+    // 当有错误发生时才会运行到这里
 	if (lev->errorcb != NULL) {
 		++lev->refcnt;
 		errorcb = lev->errorcb;

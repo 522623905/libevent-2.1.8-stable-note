@@ -77,6 +77,8 @@ struct evbuffer_cb_entry {
 
 struct bufferevent;
 struct evbuffer_chain;
+// Libevent将缓冲数据都存放到buffer中。
+// 通过一个个的evbuffer_chain连成的链表可以存放很多的缓冲数据
 struct evbuffer {
 	/** The first chain in this buffer's linked list of chains. */
 	struct evbuffer_chain *first;
@@ -96,9 +98,14 @@ struct evbuffer {
 	 * is the first chain, or it is NULL, then the last_with_datap pointer
 	 * is &buf->first.
 	 */
+    // 这是一个二级指针。使用*last_with_datap时，指向的是链表中最后一个有数据的evbuffer_chain。
+    // 所以last_with_datap存储的是倒数第二个evbuffer_chain的next成员地址。
+    // 一开始buffer->last_with_datap = &buffer->first;此时first为NULL。所以当链表没有节点时
+    // *last_with_datap为NULL。当只有一个节点时*last_with_datap就是first。
 	struct evbuffer_chain **last_with_datap;
 
 	/** Total amount of bytes stored in all chains.*/
+    // 链表中所有chain的总字节数
 	size_t total_len;
 
 	/** Number of bytes we have added to the buffer since we last tried to
@@ -173,15 +180,20 @@ struct evbuffer_chain {
 	struct evbuffer_chain *next;
 
 	/** total allocation available in the buffer field. */
+    // buffer的大小
 	size_t buffer_len;
 
 	/** unused space at the beginning of buffer or an offset into a
 	 * file for sendfile buffers. */
+    // 错开不使用的空间。该成员的值一般等于0
+    // buffer中真正的数据是从buffer + misalign开始
 	ev_misalign_t misalign;
 
 	/** Offset into buffer + misalign at which to start writing.
 	 * In other words, the total number of bytes actually stored
 	 * in buffer. */
+    // evbuffer_chain已存数据的字节数
+    // 所以要从buffer + misalign + off的位置开始写入数据
 	size_t off;
 
 	/** Set if special handling is required for this chain */
@@ -210,6 +222,7 @@ struct evbuffer_chain {
 	 * EVBUFFER_IMMUTABLE will be set in flags.  For sendfile, it
 	 * may point to NULL.
 	 */
+    // buffer真正的数据
 	unsigned char *buffer;
 };
 
@@ -276,6 +289,7 @@ struct evbuffer_multicast_parent {
 
 #define EVBUFFER_CHAIN_SIZE sizeof(struct evbuffer_chain)
 /** Return a pointer to extra data allocated along with an evbuffer. */
+// 返回chain + sizeof(evbuffer_chain) 的内存地址
 #define EVBUFFER_CHAIN_EXTRA(t, c) (t *)((struct evbuffer_chain *)(c) + 1)
 
 /** Assert that we are holding the lock on an evbuffer */

@@ -47,6 +47,7 @@ extern "C" {
 /* mutually exclusive */
 #define ev_signal_next	ev_.ev_signal.ev_signal_next
 #define ev_io_next	ev_.ev_io.ev_io_next
+// 用户设置的超时时间(相对时间)
 #define ev_io_timeout	ev_.ev_io.ev_timeout
 
 /* used only by signals */
@@ -180,9 +181,11 @@ HT_HEAD(event_io_map, event_map_entry);
 struct event_signal_map {
 	/* An array of evmap_io * or of evmap_signal *; empty entries are
 	 * set to NULL. */
-    void **entries; // 二级指针，evmap_signal*数组
+    // 二级指针，evmap_signal*数组
+    void **entries;
 	/* The number of entries available in entries */
-    int nentries; // 元素个数
+    // 元素个数
+    int nentries;
 };
 
 /* A list of events waiting on a given 'common' timeout value.  Ordinarily,
@@ -192,12 +195,15 @@ struct event_signal_map {
 // 公用超时队列，处于同一个公用超时队列中的所有事件具有相同的超时控制
 struct common_timeout_list {
 	/* List of events currently waiting in the queue. */
+    // 超时event队列。将所有具有相同超时时长的超时event放到一个队列里面
 	struct event_list events;
 	/* 'magic' timeval used to indicate the duration of events in this
 	 * queue. */
+    // 超时时长
 	struct timeval duration;
 	/* Event that triggers whenever one of the events in the queue is
 	 * ready to activate */
+    // 具有相同超时时长的超时event代表
 	struct event timeout_event;
 	/* The event_base that this timeout list is part of */
 	struct event_base *base;
@@ -327,12 +333,12 @@ struct event_base {
 	struct evcallback_list active_later_queue;
 
 	/* common timeout logic */
-    // 公用超时逻辑
+    // 公用超时逻辑，每个公用超时队列要取出一个代表插入到小根堆
 
 	/** An array of common_timeout_list* for all of the common timeout
 	 * values we know. */
-    // 公用超时事件列表，这是二级指针，每个元素都是具有同样超时
-    // 时间事件的列表
+    // 公用超时事件列表，因为可以有多个不同时长的超时event,所以为二级指针，
+    // 每个元素都是具有同样超时时间事件的列表
 	struct common_timeout_list **common_timeout_queues;
 	/** The number of entries used in common_timeout_queues */
     // 公用超时队列中的项目个数
@@ -358,7 +364,7 @@ struct event_base {
     // 缓存的时间：用来避免频繁调用gettimeofday/clock_gettime
 	struct timeval tv_cache;
 
-    // monotonic格式的时间
+    // monotonic格式的时间(boot启动后到现在的时间)
 	struct evutil_monotonic_timer monotonic_timer;
 
 	/** Difference between internal time (maybe from clock_gettime) and

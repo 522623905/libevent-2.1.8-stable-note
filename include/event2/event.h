@@ -1003,6 +1003,7 @@ int event_base_got_break(struct event_base *);
 /**@{*/
 #define evtimer_assign(ev, b, cb, arg) \
 	event_assign((ev), (b), -1, 0, (cb), (arg))
+// 创建一个超时event
 #define evtimer_new(b, cb, arg)	       event_new((b), -1, 0, (cb), (arg))
 #define evtimer_add(ev, tv)		event_add((ev), (tv))
 #define evtimer_del(ev)			event_del(ev)
