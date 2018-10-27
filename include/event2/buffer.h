@@ -113,13 +113,22 @@ struct evbuffer
 
     @see evbuffer_ptr_set()
  */
+// 用于查找(定位)buf的结构体
+// evbuffer它的数据是由一个个的evbuffer_chain用链表连在一起的
+// 因此在evbuffer中定位，不仅仅要有一个偏移量，还要指明是哪个evbuffer_chain，
+// 甚至是在evbuffer_chain中的偏移量
 struct evbuffer_ptr {
+    // 总偏移量，相对于数据的开始位置
 	ev_ssize_t pos;
 
 	/* Do not alter or rely on the values of fields: they are for internal
 	 * use */
 	struct {
+        // 指明是哪个evbuffer_chain
 		void *chain;
+        // 在evbuffer_chain中的偏移量
+        // 注意，pos_in_chain是从misalign这个错开空间之后计算的偏移量
+        // 实际在buf中偏移量为：chain->buffer+ chain->misalign + pos_in_chain
 		size_t pos_in_chain;
 	} internal_;
 };
@@ -398,6 +407,7 @@ int evbuffer_remove_buffer(struct evbuffer *src, struct evbuffer *dst,
 
 /** Used to tell evbuffer_readln what kind of line-ending to look for.
  */
+// 一个枚举类型，专门来用表示eol(end of line)的
 enum evbuffer_eol_style {
 	/** Any sequence of CR and LF characters is acceptable as an
 	 * EOL.
@@ -408,13 +418,17 @@ enum evbuffer_eol_style {
 	 * the network and later read an LF from the network, it will
 	 * be treated as two EOLs.
 	 */
+    // 行尾是任意次序或者任意数量的’\r’或者’\n’
 	EVBUFFER_EOL_ANY,
 	/** An EOL is an LF, optionally preceded by a CR.  This style is
 	 * most useful for implementing text-based internet protocols. */
+    // 行尾是”\r\n”或者’\n’
 	EVBUFFER_EOL_CRLF,
 	/** An EOL is a CR followed by an LF. */
+    // 行尾是”\r\n”，一个回车符一个换行符
 	EVBUFFER_EOL_CRLF_STRICT,
 	/** An EOL is a LF. */
+    // 行尾是’\n’字符
 	EVBUFFER_EOL_LF,
 	/** An EOL is a NUL character (that is, a single byte with value 0) */
 	EVBUFFER_EOL_NUL
@@ -771,8 +785,10 @@ struct evbuffer_ptr evbuffer_search_range(struct evbuffer *buffer, const char *w
 enum evbuffer_ptr_how {
 	/** Sets the pointer to the position; can be called on with an
 	    uninitialized evbuffer_ptr. */
+    // 偏移量是一个绝对位置
 	EVBUFFER_PTR_SET,
 	/** Advances the pointer by adding to the current position. */
+    // 偏移量是一个相对位置
 	EVBUFFER_PTR_ADD
 };
 
@@ -859,13 +875,19 @@ int evbuffer_peek(struct evbuffer *buffer, ev_ssize_t len,
 
     @see evbuffer_cb_func, evbuffer_add_cb()
  */
+// evbuffer的回调函数的相关结构体
+// 因为每次删除或者添加数据都会调用回调函数，所以下面的三个成员只能记录从上一次
+// 回调函数被调用后，到本次回调函数被调用这段时间的情况
 struct evbuffer_cb_info {
 	/** The number of bytes in this evbuffer when callbacks were last
 	 * invoked. */
+    // 上一次调用回调函数时evbuffer有多少字节的数据
 	size_t orig_size;
 	/** The number of bytes added since callbacks were last invoked. */
+    // 自上次调用回调以来添加的字节数
 	size_t n_added;
 	/** The number of bytes removed since callbacks were last invoked. */
+    // 自上次调用回调以来删除的字节数
 	size_t n_deleted;
 };
 

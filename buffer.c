@@ -126,6 +126,7 @@
 
 /* evbuffer_chain support */
 #define CHAIN_SPACE_PTR(ch) ((ch)->buffer + (ch)->misalign + (ch)->off)
+// 计算evbuffer_chain的可用空间是多少
 #define CHAIN_SPACE_LEN(ch) ((ch)->flags & EVBUFFER_IMMUTABLE ? \
 	    0 : (ch)->buffer_len - ((ch)->misalign + (ch)->off))
 
@@ -353,6 +354,7 @@ evbuffer_chain_insert(struct evbuffer *buf,
 	buf->total_len += chain->off;
 }
 
+// 创建一个datlen长度的新的chain插入到buf中
 static inline struct evbuffer_chain *
 evbuffer_chain_insert_new(struct evbuffer *buf, size_t datlen)
 {
@@ -448,6 +450,8 @@ evbuffer_defer_callbacks(struct evbuffer *buffer, struct event_base *base)
 	return 0;
 }
 
+// 使得evbuffer支持锁
+// 第二个参数若为NULL，则函数内部会申请一个锁，否则使用该lock提供的锁
 int
 evbuffer_enable_locking(struct evbuffer *buf, void *lock)
 {
@@ -458,13 +462,17 @@ evbuffer_enable_locking(struct evbuffer *buf, void *lock)
 		return -1;
 
 	if (!lock) {
+                // 自己分配锁变量
 		EVTHREAD_ALLOC_LOCK(lock, EVTHREAD_LOCKTYPE_RECURSIVE);
 		if (!lock)
 			return -1;
 		buf->lock = lock;
+                // 该evbuffer拥有锁，到时需要释放锁内存
 		buf->own_lock = 1;
 	} else {
+                // 使用参数提供的锁
 		buf->lock = lock;
+                // 自己没有拥有锁。不需要释放锁内存
 		buf->own_lock = 0;
 	}
 
@@ -480,6 +488,7 @@ evbuffer_set_parent_(struct evbuffer *buf, struct bufferevent *bev)
 	EVBUFFER_UNLOCK(buf);
 }
 
+// 直接遍历回调队列，然后依次调用回调函数
 static void
 evbuffer_run_callbacks(struct evbuffer *buffer, int running_deferred)
 {
@@ -499,6 +508,7 @@ evbuffer_run_callbacks(struct evbuffer *buffer, int running_deferred)
 		   will want to see them. */
 		clear = 0;
 	} else {
+                // 一般都是这种情况
 		mask = EVBUFFER_CB_ENABLED;
 		masked_val = EVBUFFER_CB_ENABLED;
 	}
@@ -506,9 +516,11 @@ evbuffer_run_callbacks(struct evbuffer *buffer, int running_deferred)
 	ASSERT_EVBUFFER_LOCKED(buffer);
 
 	if (LIST_EMPTY(&buffer->callbacks)) {
+                // 用户没有设置回调函数,则清零返回
 		buffer->n_add_for_cb = buffer->n_del_for_cb = 0;
 		return;
 	}
+        // 没有添加或者删除数据
 	if (buffer->n_add_for_cb == 0 && buffer->n_del_for_cb == 0)
 		return;
 
@@ -517,9 +529,11 @@ evbuffer_run_callbacks(struct evbuffer *buffer, int running_deferred)
 	info.n_added = buffer->n_add_for_cb;
 	info.n_deleted = buffer->n_del_for_cb;
 	if (clear) {
+                // 清零，为下次计算做准备
 		buffer->n_add_for_cb = 0;
 		buffer->n_del_for_cb = 0;
 	}
+        // 遍历回调函数队列，调用回调函数
 	for (cbent = LIST_FIRST(&buffer->callbacks);
 	     cbent != LIST_END(&buffer->callbacks);
 	     cbent = next) {
@@ -527,9 +541,12 @@ evbuffer_run_callbacks(struct evbuffer *buffer, int running_deferred)
 		 * to remove itself or something. */
 		next = LIST_NEXT(cbent, next);
 
+                // 该回调函数没有enable
 		if ((cbent->flags & mask) != masked_val)
 			continue;
 
+                // EVBUFFER_CB_OBSOLETE已经不被推荐使用了
+                // 应该调用用户设置的回调函数cb_func
 		if ((cbent->flags & EVBUFFER_CB_OBSOLETE))
 			cbent->cb.cb_obsolete(buffer,
 			    info.orig_size, new_size, cbent->cbarg);
@@ -538,6 +555,7 @@ evbuffer_run_callbacks(struct evbuffer *buffer, int running_deferred)
 	}
 }
 
+// 调用evbuffer的回调函数
 void
 evbuffer_invoke_callbacks_(struct evbuffer *buffer)
 {
@@ -555,6 +573,7 @@ evbuffer_invoke_callbacks_(struct evbuffer *buffer)
 		EVBUFFER_UNLOCK(buffer);
 	}
 
+        // 调用evbuffer的回调函数
 	evbuffer_run_callbacks(buffer, 0);
 }
 
@@ -574,6 +593,7 @@ evbuffer_deferred_callback(struct event_callback *cb, void *arg)
 		bufferevent_decref_(parent);
 }
 
+// 删除所有evbuffer回调函数的接口
 static void
 evbuffer_remove_all_callbacks(struct evbuffer *buffer)
 {
@@ -673,7 +693,7 @@ evbuffer_add_iovec(struct evbuffer * buf, struct evbuffer_iovec * vec, int n_vec
 		to_alloc += vec[n].iov_len;
 	}
 
-	if (evbuffer_expand_fast_(buf, to_alloc, 2) < 0) {
+        if (_fast_(buf, to_alloc, 2) < 0) {
 		goto done;
 	}
 
@@ -728,6 +748,7 @@ done:
 
 }
 
+// 调整last_with_datap，使得*last_with_datap指向最后一个有数据的chain
 static int
 advance_last_with_data(struct evbuffer *buf)
 {
@@ -1121,6 +1142,7 @@ done:
 	return result;
 }
 
+// 移除len字节的buf数据
 int
 evbuffer_drain(struct evbuffer *buf, size_t len)
 {
@@ -1134,11 +1156,13 @@ evbuffer_drain(struct evbuffer *buf, size_t len)
 	if (old_len == 0)
 		goto done;
 
+        // 冻结缓冲区头部，禁止删除头部数据
 	if (buf->freeze_start) {
 		result = -1;
 		goto done;
 	}
 
+        // 要删除的数据量大于等于已有的数据量,并且这个evbuffer是可以删除的
 	if (len >= old_len && !HAS_PINNED_R(buf)) {
 		len = old_len;
 		for (chain = buf->first; chain != NULL; chain = next) {
@@ -1146,6 +1170,7 @@ evbuffer_drain(struct evbuffer *buf, size_t len)
 			evbuffer_chain_free(chain);
 		}
 
+                // 相当于初试化evbuffer的链表
 		ZERO_CHAIN(buf);
 	} else {
 		if (len >= old_len)
@@ -1159,17 +1184,21 @@ evbuffer_drain(struct evbuffer *buf, size_t len)
 			next = chain->next;
 			remaining -= chain->off;
 
+                        // 已经删除到最后一个有数据的evbuffer_chain了
 			if (chain == *buf->last_with_datap) {
 				buf->last_with_datap = &buf->first;
 			}
+                        // 删除到倒数第二个有数据的evbuffer_chain
 			if (&chain->next == buf->last_with_datap)
 				buf->last_with_datap = &buf->first;
 
+                        // 这个chain被固定了，不能删除
 			if (CHAIN_PINNED_R(chain)) {
 				EVUTIL_ASSERT(remaining == 0);
 				chain->misalign += chain->off;
 				chain->off = 0;
-				break;
+                                // 后面的evbuffer_chain也是固定的
+                                break;
 			} else
 				evbuffer_chain_free(chain);
 		}
@@ -1182,6 +1211,7 @@ evbuffer_drain(struct evbuffer *buf, size_t len)
 
 	buf->n_del_for_cb += len;
 	/* Tell someone about changes in this buffer */
+        // 因为删除数据，所以也要调用回调函数
 	evbuffer_invoke_callbacks_(buf);
 
 done:
@@ -1190,6 +1220,7 @@ done:
 }
 
 /* Reads data from an event buffer and drains the bytes read */
+// 先复制出datlen长度的buf的数据到data_out，然后才删除buf数据
 int
 evbuffer_remove(struct evbuffer *buf, void *data_out, size_t datlen)
 {
@@ -1204,6 +1235,7 @@ evbuffer_remove(struct evbuffer *buf, void *data_out, size_t datlen)
 	return (int)n;
 }
 
+// 复制evbuffer的数据到data_out,从链表的前面开始复制
 ev_ssize_t
 evbuffer_copyout(struct evbuffer *buf, void *data_out, size_t datlen)
 {
@@ -1236,6 +1268,7 @@ evbuffer_copyout_from(struct evbuffer *buf, const struct evbuffer_ptr *pos,
 		chain = buf->first;
 		pos_in_chain = 0;
 		if (datlen > buf->total_len)
+                        // 该chain最大能提供的数据
 			datlen = buf->total_len;
 	}
 
@@ -1243,6 +1276,7 @@ evbuffer_copyout_from(struct evbuffer *buf, const struct evbuffer_ptr *pos,
 	if (datlen == 0)
 		goto done;
 
+        // 冻结缓冲区头部，禁止读取缓冲区的数据
 	if (buf->freeze_start) {
 		result = -1;
 		goto done;
@@ -1250,6 +1284,7 @@ evbuffer_copyout_from(struct evbuffer *buf, const struct evbuffer_ptr *pos,
 
 	nread = datlen;
 
+        // 从链表头部开始，复制datlen长度的数据
 	while (datlen && datlen >= chain->off - pos_in_chain) {
 		size_t copylen = chain->off - pos_in_chain;
 		memcpy(data,
@@ -1370,6 +1405,7 @@ done:
 	return result;
 }
 
+// 用来把链表内存拉直，即把一定数量的数据从链表中copy到一个连续的内存空间
 unsigned char *
 evbuffer_pullup(struct evbuffer *buf, ev_ssize_t size)
 {
@@ -1492,6 +1528,8 @@ evbuffer_readline(struct evbuffer *buffer)
 	return evbuffer_readln(buffer, NULL, EVBUFFER_EOL_ANY);
 }
 
+// 从it指向的evbuffer_chain开始查找首次出现chr的字符，会往后面的链表查找
+// 如果查找到了，那么it将会指明被查找字符的位置，并返回相对于evbuffer的总偏移量
 static inline ev_ssize_t
 evbuffer_strchr(struct evbuffer_ptr *it, const char chr)
 {
@@ -1499,18 +1537,23 @@ evbuffer_strchr(struct evbuffer_ptr *it, const char chr)
 	size_t i = it->internal_.pos_in_chain;
 	while (chain != NULL) {
 		char *buffer = (char *)chain->buffer + chain->misalign;
+                // memchr返回查找到chr位置的指针
 		char *cp = memchr(buffer+i, chr, chain->off-i);
 		if (cp) {
+                        // 如果查找到了，把it赋值为该字符的位置
+                        // 并返回相对于evbuffer的总偏移量
 			it->internal_.chain = chain;
 			it->internal_.pos_in_chain = cp - buffer;
 			it->pos += (cp - buffer - i);
 			return it->pos;
 		}
+                // 如果没找到，继续往下一个chain查找
 		it->pos += chain->off - i;
 		i = 0;
 		chain = chain->next;
 	}
 
+        // 如果没有找到，就返回-1
 	return (-1);
 }
 
@@ -1563,6 +1606,8 @@ evbuffer_find_eol_char(struct evbuffer_ptr *it)
 	return (-1);
 }
 
+// 从evbuffer_ptr计算有几个连续字符都属于字符串 chrset 所指字符串中的字符
+// 返回连续包含字符串 chrset 内的字符数目
 static inline int
 evbuffer_strspn(
 	struct evbuffer_ptr *ptr, const char *chrset)
@@ -1582,6 +1627,7 @@ evbuffer_strspn(
 				if (buffer[i] == *p++)
 					goto next;
 			}
+
 			ptr->internal_.chain = chain;
 			ptr->internal_.pos_in_chain = i;
 			ptr->pos += count;
@@ -1602,7 +1648,7 @@ evbuffer_strspn(
 	}
 }
 
-
+// 获取evbuffer_ptr对应位置的字符
 static inline int
 evbuffer_getchr(struct evbuffer_ptr *it)
 {
@@ -1615,6 +1661,8 @@ evbuffer_getchr(struct evbuffer_ptr *it)
 	return (unsigned char)chain->buffer[chain->misalign + off];
 }
 
+// 根据eol_style行尾类型找到行尾。返回值的位置偏移量就指向那个行尾符号
+// 行尾符号前面的evbuffer数据就是一行的内容
 struct evbuffer_ptr
 evbuffer_search_eol(struct evbuffer *buffer,
     struct evbuffer_ptr *start, size_t *eol_len_out,
@@ -1634,6 +1682,7 @@ evbuffer_search_eol(struct evbuffer *buffer,
 
 	EVBUFFER_LOCK(buffer);
 
+        // 没有指明start则从头开始找
 	if (start) {
 		memcpy(&it, start, sizeof(it));
 	} else {
@@ -1649,11 +1698,14 @@ evbuffer_search_eol(struct evbuffer *buffer,
 		if (evbuffer_find_eol_char(&it) < 0)
 			goto done;
 		memcpy(&it2, &it, sizeof(it));
+                // 该case的就是寻找在最前面的任意数量的\r和\n。
+                // evbuffer_strspn返回第一个不是\r或者\n的下标。
+                // 此时extra_drain前面的都是\r或者\n。直接删除即可
 		extra_drain = evbuffer_strspn(&it2, "\r\n");
 		break;
 	case EVBUFFER_EOL_CRLF_STRICT: {
 		it = evbuffer_search(buffer, "\r\n", 2, &it);
-		if (it.pos < 0)
+                if (it.pos < 0)
 			goto done;
 		extra_drain = 2;
 		break;
@@ -1705,6 +1757,8 @@ done:
 	return it;
 }
 
+// 成功,返回读取到的一行数据,否则返回NULL。该行数据会自动加上'\0'结尾.
+// 如果n_read_out不为NULL，则被赋值为读取到的一行的字符数
 char *
 evbuffer_readln(struct evbuffer *buffer, size_t *n_read_out,
 		enum evbuffer_eol_style eol_style)
@@ -1720,9 +1774,13 @@ evbuffer_readln(struct evbuffer *buffer, size_t *n_read_out,
 		goto done;
 	}
 
+        // 根据eol_style行尾类型找到行尾。返回值的位置偏移量就指向那个行尾符号
+        // 行尾符号前面的evbuffer数据就是一行的内容。extra_drain指明这个行尾
+        // 有多少个字符。后面需要把这个行尾符号删除，方便以后再次读取一行
 	it = evbuffer_search_eol(buffer, NULL, &extra_drain, eol_style);
 	if (it.pos < 0)
 		goto done;
+        // 并不包括换行符
 	n_to_copy = it.pos;
 
 	if ((line = mm_malloc(n_to_copy+1)) == NULL) {
@@ -1730,9 +1788,11 @@ evbuffer_readln(struct evbuffer *buffer, size_t *n_read_out,
 		goto done;
 	}
 
+        // 复制并删除n_to_copy字节
 	evbuffer_remove(buffer, line, n_to_copy);
 	line[n_to_copy] = '\0';
 
+        // extra_drain指明是行尾符号占有的字节数。现在要删除之
 	evbuffer_drain(buffer, extra_drain);
 	result = line;
 done:
@@ -1876,6 +1936,7 @@ done:
 	return result;
 }
 
+// 在链表头添加数据
 int
 evbuffer_prepend(struct evbuffer *buf, const void *data, size_t datlen)
 {
@@ -1884,6 +1945,7 @@ evbuffer_prepend(struct evbuffer *buf, const void *data, size_t datlen)
 
 	EVBUFFER_LOCK(buf);
 
+        // 冻结缓冲区头部，禁止在头部添加数据
 	if (buf->freeze_start) {
 		goto done;
 	}
@@ -1893,6 +1955,7 @@ evbuffer_prepend(struct evbuffer *buf, const void *data, size_t datlen)
 
 	chain = buf->first;
 
+        // 该链表暂时还没有节点，则新建插入chain
 	if (chain == NULL) {
 		chain = evbuffer_chain_new(datlen);
 		if (!chain)
@@ -1901,6 +1964,7 @@ evbuffer_prepend(struct evbuffer *buf, const void *data, size_t datlen)
 	}
 
 	/* we cannot touch immutable buffers */
+        // 该chain可以修改
 	if ((chain->flags & EVBUFFER_IMMUTABLE) == 0) {
 		/* Always true for mutable buffers */
 		EVUTIL_ASSERT(chain->misalign >= 0 &&
@@ -1913,6 +1977,7 @@ evbuffer_prepend(struct evbuffer *buf, const void *data, size_t datlen)
 
 		if ((size_t)chain->misalign >= datlen) {
 			/* we have enough space to fit everything */
+                        // 空闲空间足够大
 			memcpy(chain->buffer + chain->misalign - datlen,
 			    data, datlen);
 			chain->off += datlen;
@@ -1922,6 +1987,7 @@ evbuffer_prepend(struct evbuffer *buf, const void *data, size_t datlen)
 			goto out;
 		} else if (chain->misalign) {
 			/* we can only fit some of the data. */
+                        // 空间空间不够大，就先存储够存储的misalign个字节
 			memcpy(chain->buffer,
 			    (char*)data + datlen - chain->misalign,
 			    (size_t)chain->misalign);
@@ -1934,6 +2000,7 @@ evbuffer_prepend(struct evbuffer *buf, const void *data, size_t datlen)
 	}
 
 	/* we need to add another chain */
+        // 新建一个新的chain来存放剩余的data
 	if ((tmp = evbuffer_chain_new(datlen)) == NULL)
 		goto done;
 	buf->first = tmp;
@@ -1946,11 +2013,13 @@ evbuffer_prepend(struct evbuffer *buf, const void *data, size_t datlen)
 	EVUTIL_ASSERT(datlen <= tmp->buffer_len);
 	tmp->misalign = tmp->buffer_len - datlen;
 
+        // 把剩余的datlen长的数据放到这个新建的chain
 	memcpy(tmp->buffer + tmp->misalign, data, datlen);
 	buf->total_len += datlen;
 	buf->n_add_for_cb += datlen;
 
 out:
+        // 调用回调函数
 	evbuffer_invoke_callbacks_(buf);
 	result = 0;
 done:
@@ -1984,6 +2053,7 @@ evbuffer_chain_should_realign(struct evbuffer_chain *chain,
 
 /* Expands the available space in the event buffer to at least datlen, all in
  * a single chunk.  Return that chunk. */
+// 扩大链表的buffer空间，使得下次add一个长度为datlen的数据时，无需动态申请内存
 static struct evbuffer_chain *
 evbuffer_expand_singlechain(struct evbuffer *buf, size_t datlen)
 {
@@ -1996,13 +2066,17 @@ evbuffer_expand_singlechain(struct evbuffer *buf, size_t datlen)
 	/* XXX If *chainp is no longer writeable, but has enough space in its
 	 * misalign, this might be a bad idea: we could still use *chainp, not
 	 * (*chainp)->next. */
+        // *chainp指向最后一个有数据的evbuffer_chain或者为NULL
 	if (*chainp && CHAIN_SPACE_LEN(*chainp) == 0)
 		chainp = &(*chainp)->next;
 
 	/* 'chain' now points to the first chain with writable space (if any)
 	 * We will either use it, realign it, replace it, or resize it. */
+        // 经过上面的那个if后，当最后一个有数据的evbuffer_chain还有空闲空间时
+        // *chainp就指向之。否则*chainp指向最后一个有数据的evbuffer_chain的next
 	chain = *chainp;
 
+        // chain为NULL或是不可修改的，那么就只能插入一个新的chain了
 	if (chain == NULL ||
 	    (chain->flags & (EVBUFFER_IMMUTABLE|EVBUFFER_MEM_PINNED_ANY))) {
 		/* We can't use the last_with_data chain at all.  Just add a
@@ -2011,6 +2085,8 @@ evbuffer_expand_singlechain(struct evbuffer *buf, size_t datlen)
 	}
 
 	/* If we can fit all the data, then we don't have to do anything */
+        // 这个chain的可用空间大于扩展空间,Libevent并不会扩大buffer空间.
+        // 因为Libevent认为现在的可用空间可以用作用户提出的预留空间
 	if (CHAIN_SPACE_LEN(chain) >= datlen) {
 		result = chain;
 		goto ok;
@@ -2018,6 +2094,7 @@ evbuffer_expand_singlechain(struct evbuffer *buf, size_t datlen)
 
 	/* If the chain is completely empty, just replace it by adding a new
 	 * empty chain. */
+        // 如果chain完全为空，则直接添加一个新的chain替换它
 	if (chain->off == 0) {
 		goto insert_new;
 	}
@@ -2028,6 +2105,8 @@ evbuffer_expand_singlechain(struct evbuffer *buf, size_t datlen)
 	 * and not moving too much data.  Otherwise the space savings are
 	 * probably offset by the time lost in copying.
 	 */
+        // 通过使用misalign错位空间，也能使得可用空间大于等于预留空间，
+        // 那么也不用扩大buffer空间
 	if (evbuffer_chain_should_realign(chain, datlen)) {
 		evbuffer_chain_align(chain);
 		result = chain;
@@ -2041,11 +2120,14 @@ evbuffer_expand_singlechain(struct evbuffer *buf, size_t datlen)
 	 */
 
 	/* Would expanding this chunk be affordable and worthwhile? */
+        // 空闲空间小于总空间的1/8 或者 已有的数据量大于MAX_TO_COPY_IN_EXPAND(4096)
+        // 本chain有比较多的数据，将这些数据迁移到另外一个chain是不划算的
 	if (CHAIN_SPACE_LEN(chain) < chain->buffer_len / 8 ||
 	    chain->off > MAX_TO_COPY_IN_EXPAND ||
 		datlen >= (EVBUFFER_CHAIN_MAX - chain->off)) {
 		/* It's not worth resizing this chain. Can the next one be
 		 * used? */
+                // 下一个chain是否可以有足够的空闲空间.有则直接用之
 		if (chain->next && CHAIN_SPACE_LEN(chain->next) >= datlen) {
 			/* Yes, we can just use the next chain (which should
 			 * be empty. */
@@ -2054,6 +2136,7 @@ evbuffer_expand_singlechain(struct evbuffer *buf, size_t datlen)
 		} else {
 			/* No; append a new chain (which will free all
 			 * terminal empty chains.) */
+                        // 如果也没有，则插入新的chain
 			goto insert_new;
 		}
 	} else {
@@ -2062,13 +2145,16 @@ evbuffer_expand_singlechain(struct evbuffer *buf, size_t datlen)
 		 * can do so without having to copy more than
 		 * MAX_TO_COPY_IN_EXPAND bytes. */
 		/* figure out how much space we need */
+                // 由于本chain的数据量比较小，所以把这个chain的数据迁移到另外一个
+                // chain上是值得的
 		size_t length = chain->off + datlen;
 		struct evbuffer_chain *tmp = evbuffer_chain_new(length);
 		if (tmp == NULL)
 			goto err;
 
 		/* copy the data over that we had so far */
-		tmp->off = chain->off;
+                tmp->off = chain->off;
+                // 进行数据迁移
 		memcpy(tmp->buffer, chain->buffer + chain->misalign,
 		    chain->off);
 		/* fix up the list */
@@ -2078,6 +2164,7 @@ evbuffer_expand_singlechain(struct evbuffer *buf, size_t datlen)
 		if (buf->last == chain)
 			buf->last = tmp;
 
+                // 设置新chain的next并释放旧的chain
 		tmp->next = chain->next;
 		evbuffer_chain_free(chain);
 		goto ok;
@@ -2096,6 +2183,7 @@ err:
 
 /* Make sure that datlen bytes are available for writing in the last n
  * chains.  Never copies or moves data. */
+// 用最多不超过n个节点就提供datlen大小的空闲空间。链表过长是不好的
 int
 evbuffer_expand_fast_(struct evbuffer *buf, size_t datlen, int n)
 {
@@ -2104,8 +2192,10 @@ evbuffer_expand_fast_(struct evbuffer *buf, size_t datlen, int n)
 	int used;
 
 	ASSERT_EVBUFFER_LOCKED(buf);
+        // n必须大于等于2
 	EVUTIL_ASSERT(n >= 2);
 
+        //如果最后一个chain为NULL或是不可更改的，则新建插入
 	if (chain == NULL || (chain->flags & EVBUFFER_IMMUTABLE)) {
 		/* There is no last chunk, or we can't touch the last chunk.
 		 * Just add a new chunk. */
@@ -2117,29 +2207,35 @@ evbuffer_expand_fast_(struct evbuffer *buf, size_t datlen, int n)
 		return (0);
 	}
 
+        // 要使用的chain个数
 	used = 0; /* number of chains we're using space in. */
+        // 拥有的可用空间字节数
 	avail = 0; /* how much space they have. */
 	/* How many bytes can we stick at the end of buffer as it is?  Iterate
 	 * over the chains at the end of the buffer, tring to see how much
 	 * space we have in the first n. */
 	for (chain = *buf->last_with_datap; chain; chain = chain->next) {
-		if (chain->off) {
+                if (chain->off) {
+                        // 最后一个有数据的节点的可用空间也是要被使用
 			size_t space = (size_t) CHAIN_SPACE_LEN(chain);
 			EVUTIL_ASSERT(chain == *buf->last_with_datap);
 			if (space) {
 				avail += space;
 				++used;
 			}
-		} else {
+                } else {
+                        // 链表中off为0的空buffer统统使用
 			/* No data in chain; realign it. */
 			chain->misalign = 0;
 			avail += chain->buffer_len;
 			++used;
 		}
+                // 链表中的节点的可用空间已经足够了
 		if (avail >= datlen) {
 			/* There is already enough space.  Just return */
 			return (0);
 		}
+                // 到达了最大可以忍受的链表长度
 		if (used == n)
 			break;
 	}
@@ -2147,11 +2243,15 @@ evbuffer_expand_fast_(struct evbuffer *buf, size_t datlen, int n)
 	/* There wasn't enough space in the first n chains with space in
 	 * them. Either add a new chain with enough space, or replace all
 	 * empty chains with one that has enough space, depending on n. */
+        // 前面的for循环，如果找够了空闲空间，那么是直接return;
+        // 运行到这里时，就说明还没找到空闲空间。一般是因为链表后面的off等于0
+        // 的节点已经被用完了都还不能满足datlen
 	if (used < n) {
 		/* The loop ran off the end of the chains before it hit n
 		 * chains; we can add another. */
 		EVUTIL_ASSERT(chain == NULL);
 
+                // 申请一个足够大的evbuffer_chain，把空间补足
 		tmp = evbuffer_chain_new(datlen - avail);
 		if (tmp == NULL)
 			return (-1);
@@ -2163,30 +2263,43 @@ evbuffer_expand_fast_(struct evbuffer *buf, size_t datlen, int n)
 		 * just allocated a new chain earlier) */
 		return (0);
 	} else {
+                // used == n。把后面的n个节点都用了还是不够datlen空间
+                // 这个n个节点中，至少有n-1个节点的off等于0
+                // n个节点都不够，Libevent就认为这些节点都是饭桶，Libevent会统统删除
+                // 然后新建一个足够大的evbuffer_chain
+
 		/* Nuke _all_ the empty chains. */
+                // 标志该链表的所有节点都是off为0的。在这种情况下，将删除所有的节点
 		int rmv_all = 0; /* True iff we removed last_with_data. */
 		chain = *buf->last_with_datap;
 		if (!chain->off) {
+                        // 这说明链表中的节点都是没有数据的evbuffer_chain
 			EVUTIL_ASSERT(chain == buf->first);
 			rmv_all = 1;
 			avail = 0;
 		} else {
 			/* can't overflow, since only mutable chains have
 			 * huge misaligns. */
+                        // 最后一个有数据的chain的可用空间的大小。这个空间是可以用上的
 			avail = (size_t) CHAIN_SPACE_LEN(chain);
 			chain = chain->next;
 		}
 
-
+                // chain指向第一个off等于0的evbuffer_chain 或者等于NULL
+                // 将这些off等于0的evbuffer_chain统统free掉，不要了。
 		for (; chain; chain = next) {
 			next = chain->next;
 			EVUTIL_ASSERT(chain->off == 0);
 			evbuffer_chain_free(chain);
 		}
 		EVUTIL_ASSERT(datlen >= avail);
+                // 然后new一个足够大的evbuffer_chain即可。这能降低链表的长度
 		tmp = evbuffer_chain_new(datlen - avail);
+                // new失败
 		if (tmp == NULL) {
+                        // 这种情况下，该链表就根本没有节点了
 			if (rmv_all) {
+                                // 相当于初始化evbuffer的链表
 				ZERO_CHAIN(buf);
 			} else {
 				buf->last = *buf->last_with_datap;
@@ -2196,6 +2309,7 @@ evbuffer_expand_fast_(struct evbuffer *buf, size_t datlen, int n)
 		}
 
 		if (rmv_all) {
+                        // 这种情况下，该链表就只有一个节点了
 			buf->first = buf->last = tmp;
 			buf->last_with_datap = &buf->first;
 		} else {
@@ -2206,6 +2320,7 @@ evbuffer_expand_fast_(struct evbuffer *buf, size_t datlen, int n)
 	}
 }
 
+// 扩大链表的buffer空间，使得下次add一个长度为datlen的数据时，无需动态申请内存
 int
 evbuffer_expand(struct evbuffer *buf, size_t datlen)
 {
@@ -2270,6 +2385,10 @@ evbuffer_expand(struct evbuffer *buf, size_t datlen)
       space in the vectors, even if more space is available.
     @return The number of buffers we're using.
  */
+// 将链表的各个evbuffer_chain的空闲空间的地址赋值给iovec数组
+// 让vecs数组的指针指向evbuffer中的可用chain.标明哪个chain可用并且从chain的哪里开始，以及可用的字节数
+// howmuch是要扩容的大小,vecs、n_vecs_avail分别是iovec数组和数组的大小
+// chainp是值-结果参数，它最后指向第一个有可用空间的chain
 int
 evbuffer_read_setup_vecs_(struct evbuffer *buf, ev_ssize_t howmuch,
     struct evbuffer_iovec *vecs, int n_vecs_avail,
@@ -2286,26 +2405,39 @@ evbuffer_read_setup_vecs_(struct evbuffer *buf, ev_ssize_t howmuch,
 
 	so_far = 0;
 	/* Let firstchain be the first chain with any space on it */
+        // 因为找的是evbuffer链表中的空闲空间，所以从最后一个有数据的chain中开始找
 	firstchainp = buf->last_with_datap;
 	if (CHAIN_SPACE_LEN(*firstchainp) == 0) {
+                // 这个chain已经没有空间了,只能下一个chain
 		firstchainp = &(*firstchainp)->next;
 	}
 
+        // 因为Libevent在调用本函数之前，一般会调用_evbuffer_expand_fast来扩大
+        // evbuffer的可用空间。所以下面的循环中并没有判断chain是否为NULL，就直接 chain->next
 	chain = *firstchainp;
+        // 链表的各个evbuffer_chain的空闲空间的地址赋值给iovec数组
 	for (i = 0; i < n_vecs_avail && so_far < (size_t)howmuch; ++i) {
 		size_t avail = (size_t) CHAIN_SPACE_LEN(chain);
+                // 如果exact为真，那么即使这个chain有更多的可用空间，也不会使用。只会
+                // 要自己正需要的空间
 		if (avail > (howmuch - so_far) && exact)
 			avail = howmuch - so_far;
+                // 这个chain的可用空间的开始位置
 		vecs[i].iov_base = (void *)CHAIN_SPACE_PTR(chain);
+                // 可用长度
 		vecs[i].iov_len = avail;
 		so_far += avail;
 		chain = chain->next;
 	}
 
+        // 指向第一个有可用空间的chain
 	*chainp = firstchainp;
+
+        // 返回需要多少个chain才能有howmuch这么多的空闲空间
 	return i;
 }
 
+// 通过ioctl获取这个socket的读缓冲区中有多少字节
 static int
 get_n_bytes_readable_on_socket(evutil_socket_t fd)
 {
@@ -2327,6 +2459,9 @@ get_n_bytes_readable_on_socket(evutil_socket_t fd)
 
 /* TODO(niels): should this function return ev_ssize_t and take ev_ssize_t
  * as howmuch? */
+// 从一个socket中读取数据到evbuffer中
+// 错误返回-1，断开了连接返回0
+// howmuch打算读取的字节数
 int
 evbuffer_read(struct evbuffer *buf, evutil_socket_t fd, int howmuch)
 {
@@ -2334,6 +2469,7 @@ evbuffer_read(struct evbuffer *buf, evutil_socket_t fd, int howmuch)
 	int n;
 	int result;
 
+        //所在的系统支持iovec或者是Windows操作系统
 #ifdef USE_IOVEC_IMPL
 	int nvecs, i, remaining;
 #else
@@ -2343,24 +2479,32 @@ evbuffer_read(struct evbuffer *buf, evutil_socket_t fd, int howmuch)
 
 	EVBUFFER_LOCK(buf);
 
+        // 冻结缓冲区尾部，禁止在尾部追加数据
 	if (buf->freeze_end) {
 		result = -1;
 		goto done;
 	}
 
+        // 获取这个socket的读缓冲区中有多少字节,
+        // 进而确定本次要读多少字节到evbuffer中
 	n = get_n_bytes_readable_on_socket(fd);
 	if (n <= 0 || n > EVBUFFER_MAX_READ)
 		n = EVBUFFER_MAX_READ;
 	if (howmuch < 0 || howmuch > n)
 		howmuch = n;
 
+        // 所在的系统支持iovec或者是Windows操作系统
 #ifdef USE_IOVEC_IMPL
 	/* Since we can use iovecs, we're willing to use the last
 	 * NUM_READ_IOVEC chains. */
+        // 在真正read之前会先把evbuffer扩容，使得其有howmuch字节的空闲空间
+        // ,免得在read的时候缓冲区不够
 	if (evbuffer_expand_fast_(buf, howmuch, NUM_READ_IOVEC) == -1) {
 		result = -1;
 		goto done;
 	} else {
+                // 把链表的各个evbuffer_chain的空闲空间的地址赋值给iovec数组
+                // 可以使用readv把数据读取到相应的chain中
 		IOV_TYPE vecs[NUM_READ_IOVEC];
 #ifdef EVBUFFER_IOVEC_IS_NATIVE_
 		nvecs = evbuffer_read_setup_vecs_(buf, howmuch, vecs,
@@ -2368,10 +2512,14 @@ evbuffer_read(struct evbuffer *buf, evutil_socket_t fd, int howmuch)
 #else
 		/* We aren't using the native struct iovec.  Therefore,
 		   we are on win32. */
+                // 在Windows系统中，evbuffer_iovec定义得和posix中的iovec一样.
+                // 因为_evbuffer_read_setup_vecs函数只接受像iovec那样结构体的参数
 		struct evbuffer_iovec ev_vecs[NUM_READ_IOVEC];
 		nvecs = evbuffer_read_setup_vecs_(buf, howmuch, ev_vecs, 2,
 		    &chainp, 1);
 
+                // 因为在Windows中，需要使用WSABUF结构体读取数据，所以要从evbuffer_iovec
+                // 中将一些值提出出来，放到vecs中
 		for (i=0; i < nvecs; ++i)
 			WSABUF_FROM_EVBUFFER_IOV(&vecs[i], &ev_vecs[i]);
 #endif
@@ -2380,6 +2528,7 @@ evbuffer_read(struct evbuffer *buf, evutil_socket_t fd, int howmuch)
 		{
 			DWORD bytesRead;
 			DWORD flags=0;
+                        // 虽然Windows支持类似readv的函数，但Windows没有readv函数，只有下面的函数
 			if (WSARecv(fd, vecs, nvecs, &bytesRead, &flags, NULL, NULL)) {
 				/* The read failed. It might be a close,
 				 * or it might be an error. */
@@ -2395,6 +2544,8 @@ evbuffer_read(struct evbuffer *buf, evutil_socket_t fd, int howmuch)
 #endif
 	}
 
+        // 如果所在的系统不支持 iovec并且不是Windows系统。也就是说不支持类似
+        // readv这样的函数。那么只能把所有的数据都读到一个chain中
 #else /*!USE_IOVEC_IMPL*/
 	/* If we don't have FIONREAD, we might waste some space here */
 	/* XXX we _will_ waste some space here if there is any space left
@@ -2414,10 +2565,12 @@ evbuffer_read(struct evbuffer *buf, evutil_socket_t fd, int howmuch)
 #endif
 #endif /* USE_IOVEC_IMPL */
 
+        // 错误
 	if (n == -1) {
 		result = -1;
 		goto done;
 	}
+        // 断开了连接
 	if (n == 0) {
 		result = 0;
 		goto done;
@@ -2425,19 +2578,27 @@ evbuffer_read(struct evbuffer *buf, evutil_socket_t fd, int howmuch)
 
 #ifdef USE_IOVEC_IMPL
 	remaining = n;
-	for (i=0; i < nvecs; ++i) {
+        // 使用iovec读取数据时，只是把数据往chain中填充，并没有修改evbuffer_chain
+        // 的成员，比如off偏移量成员。此时就需要把这个off修改到正确值
+	for (i=0; i < nvecs; ++i) {                
 		/* can't overflow, since only mutable chains have
 		 * huge misaligns. */
+                // CHAIN_SPACE_LEN(*chainp)返回的是填充数据前的空闲空间。
+                // 除了最后那个chain外，其他的chain都会被填满的。所以对于非last
+                // chain，直接把off加上这个space即可
 		size_t space = (size_t) CHAIN_SPACE_LEN(*chainp);
 		/* XXXX This is a kludge that can waste space in perverse
 		 * situations. */
 		if (space > EVBUFFER_CHAIN_MAX)
 			space = EVBUFFER_CHAIN_MAX;
 		if ((ev_ssize_t)space < remaining) {
+                        // 前面的chain
 			(*chainp)->off += space;
 			remaining -= (int)space;
 		} else {
+                        // 最后那个chain
 			(*chainp)->off += remaining;
+                        // 指向最后一个有数据的chain
 			buf->last_with_datap = chainp;
 			break;
 		}
@@ -2447,10 +2608,12 @@ evbuffer_read(struct evbuffer *buf, evutil_socket_t fd, int howmuch)
 	chain->off += n;
 	advance_last_with_data(buf);
 #endif
+        // 添加了n字节
 	buf->total_len += n;
 	buf->n_add_for_cb += n;
 
 	/* Tell someone about changes in this buffer */
+        // 因为evbuffer添加了数据，就需要调用回调函数
 	evbuffer_invoke_callbacks_(buf);
 	result = n;
 done:
@@ -2567,6 +2730,8 @@ evbuffer_write_sendfile(struct evbuffer *buffer, evutil_socket_t dest_fd,
 }
 #endif
 
+// 把buffer的数据写入fd中
+// howmuch是要写的字节数。如果小于0，那么就把buffer里的所有数据都写入fd
 int
 evbuffer_write_atmost(struct evbuffer *buffer, evutil_socket_t fd,
     ev_ssize_t howmuch)
@@ -2575,25 +2740,34 @@ evbuffer_write_atmost(struct evbuffer *buffer, evutil_socket_t fd,
 
 	EVBUFFER_LOCK(buffer);
 
+        // 冻结了链表头，无法往fd写数据。因为写之后，还要把数据从evbuffer中删除
 	if (buffer->freeze_start) {
 		goto done;
 	}
 
+        // 此情况，则写入buffer全部数据
 	if (howmuch < 0 || (size_t)howmuch > buffer->total_len)
 		howmuch = buffer->total_len;
 
 	if (howmuch > 0) {
 #ifdef USE_SENDFILE
+                // 如果支持，使用sendfile写入更快
 		struct evbuffer_chain *chain = buffer->first;
+                // 需通过evbuffer_add_file添加数据，才会使用sendfile
 		if (chain != NULL && (chain->flags & EVBUFFER_SENDFILE))
 			n = evbuffer_write_sendfile(buffer, fd, howmuch);
 		else {
 #endif
 #ifdef USE_IOVEC_IMPL
+                // 所在的系统支持writev这类函数
+                // 函数内部会设置数组元素的成员指针，以及长度成员
 		n = evbuffer_write_iovec(buffer, fd, howmuch);
 #elif defined(_WIN32)
 		/* XXX(nickm) Don't disable this code until we know if
 		 * the WSARecv code above works. */
+                // 把evbuffer前面的howmuch字节拉直。使得这howmuch字节都放在一个chain里面
+                // 也就是放在一个连续的空间，不再是之前的多个链表节点。这样就能直接用
+                // send函数发送了
 		void *p = evbuffer_pullup(buffer, howmuch);
 		EVUTIL_ASSERT(p || !howmuch);
 		n = send(fd, p, howmuch, 0);
@@ -2607,6 +2781,7 @@ evbuffer_write_atmost(struct evbuffer *buffer, evutil_socket_t fd,
 #endif
 	}
 
+        // 从链表中删除已经写入到socket的n个字节
 	if (n > 0)
 		evbuffer_drain(buffer, n);
 
@@ -2615,6 +2790,7 @@ done:
 	return (n);
 }
 
+// 把buffer所有数据写入到socket fd中
 int
 evbuffer_write(struct evbuffer *buffer, evutil_socket_t fd)
 {
@@ -2666,6 +2842,9 @@ evbuffer_ptr_subtract(struct evbuffer *buf, struct evbuffer_ptr *pos,
 	}
 }
 
+// 像fseek函数那样，可以设置或者移动evbuffer_ptr偏移量，并且可以绝对和相对地移动
+// 将这个pos指向链表的开头
+// position指明移动的偏移量，how指明该偏移量是绝对偏移量还是相对当前位置的偏移量
 int
 evbuffer_ptr_set(struct evbuffer *buf, struct evbuffer_ptr *pos,
     size_t position, enum evbuffer_ptr_how how)
@@ -2676,12 +2855,17 @@ evbuffer_ptr_set(struct evbuffer *buf, struct evbuffer_ptr *pos,
 
 	EVBUFFER_LOCK(buf);
 
+        // 给pos设置新的总偏移量值
 	switch (how) {
+        // 绝对位置
 	case EVBUFFER_PTR_SET:
+                // 从第一个evbuffer_chain算起
 		chain = buf->first;
+                // 设置总偏移量
 		pos->pos = position;
 		position = 0;
 		break;
+        // 相对位置
 	case EVBUFFER_PTR_ADD:
 		/* this avoids iterating over all previous chains if
 		   we just want to advance the position */
@@ -2689,22 +2873,27 @@ evbuffer_ptr_set(struct evbuffer *buf, struct evbuffer_ptr *pos,
 			EVBUFFER_UNLOCK(buf);
 			return -1;
 		}
+                // 从当前evbuffer_chain算起
 		chain = pos->internal_.chain;
+                // 加上相对偏移量
 		pos->pos += position;
 		position = pos->internal_.pos_in_chain;
 		break;
 	}
 
 	EVUTIL_ASSERT(EV_SIZE_MAX - left >= position);
+        // 这个偏移量跨了evbuffer_chain。可能不止跨一个chain
 	while (chain && position + left >= chain->off) {
 		left -= chain->off - position;
 		chain = chain->next;
 		position = 0;
-	}
+        }
 	if (chain) {
+                // 设置evbuffer_chain内的偏移量
 		pos->internal_.chain = chain;
 		pos->internal_.pos_in_chain = position + left;
 	} else if (left == 0) {
+                // 跨过了所有的节点
 		/* The first byte in the (nonexistent) chain after the last chain */
 		pos->internal_.chain = NULL;
 		pos->internal_.pos_in_chain = 0;
@@ -2722,6 +2911,9 @@ evbuffer_ptr_set(struct evbuffer *buf, struct evbuffer_ptr *pos,
    Compare the bytes in buf at position pos to the len bytes in mem.  Return
    less than 0, 0, or greater than 0 as memcmp.
  */
+// 该函数是比较mem字符串和从evbuffer中pos位置开始的字符是否相等
+// 需要考虑到跨evbuffer_chain
+// 匹配成功会返回0
 static int
 evbuffer_ptr_memcmp(const struct evbuffer *buf, const struct evbuffer_ptr *pos,
     const char *mem, size_t len)
@@ -2732,6 +2924,7 @@ evbuffer_ptr_memcmp(const struct evbuffer *buf, const struct evbuffer_ptr *pos,
 
 	ASSERT_EVBUFFER_LOCKED(buf);
 
+        // 链表数据不够
 	if (pos->pos < 0 ||
 	    EV_SIZE_MAX - len < (size_t)pos->pos ||
 	    pos->pos + len > buf->total_len)
@@ -2739,7 +2932,9 @@ evbuffer_ptr_memcmp(const struct evbuffer *buf, const struct evbuffer_ptr *pos,
 
 	chain = pos->internal_.chain;
 	position = pos->internal_.pos_in_chain;
+        // 需要考虑到跨evbuffer_chain
 	while (len && chain) {
+                // 该evbuffer_chain中可以比较的字符数
 		size_t n_comparable;
 		if (len + position > chain->off)
 			n_comparable = chain->off - position;
@@ -2747,23 +2942,28 @@ evbuffer_ptr_memcmp(const struct evbuffer *buf, const struct evbuffer_ptr *pos,
 			n_comparable = len;
 		r = memcmp(chain->buffer + chain->misalign + position, mem,
 		    n_comparable);
+                // 不匹配，则返回
 		if (r)
 			return r;
+                // 如果字符mem还有一些字符没有参与比较，那么就需要用下一个evbuffer_chain的数据
 		mem += n_comparable;
 		len -= n_comparable;
-		position = 0;
+                position = 0;
 		chain = chain->next;
 	}
 
+        // 匹配成功，返回0
 	return 0;
 }
 
+// 从start处开始查找字符串what
 struct evbuffer_ptr
 evbuffer_search(struct evbuffer *buffer, const char *what, size_t len, const struct evbuffer_ptr *start)
 {
 	return evbuffer_search_range(buffer, what, len, start, NULL);
 }
 
+// 从[start,end]处查找字符串what
 struct evbuffer_ptr
 evbuffer_search_range(struct evbuffer *buffer, const char *what, size_t len, const struct evbuffer_ptr *start, const struct evbuffer_ptr *end)
 {
@@ -2774,6 +2974,7 @@ evbuffer_search_range(struct evbuffer *buffer, const char *what, size_t len, con
 
 	EVBUFFER_LOCK(buffer);
 
+        // 初始化pos
 	if (start) {
 		memcpy(&pos, start, sizeof(pos));
 		chain = pos.internal_.chain;
@@ -2791,32 +2992,47 @@ evbuffer_search_range(struct evbuffer *buffer, const char *what, size_t len, con
 
 	first = what[0];
 
+        // 在本函数里面并不考虑到what的数据量比较链表的总数据量还多。
+        // 但在evbuffer_ptr_memcmp函数中会考虑这个问题。此时该函数直接返回-1。
+        // 本函数之所以没有考虑这样情况，可能是因为，在[start, end]之间有多少
+        // 数据是不值得统计的，时间复杂度是O(n)。不是一个简单的buffer->total_len就能获取到的
 	while (chain) {
 		const unsigned char *start_at =
 		    chain->buffer + chain->misalign +
 		    pos.internal_.pos_in_chain;
+                // 函数的作用是:在ptr指向的内存块中(长度为num个字节),需找字符value。
+                // 如果找到就返回对应的位置，找不到返回NULL
 		p = memchr(start_at, first,
 		    chain->off - pos.internal_.pos_in_chain);
 		if (p) {
+                        // pos指向了这个chain中出现等于what[0]字符的位置
 			pos.pos += p - start_at;
 			pos.internal_.pos_in_chain += p - start_at;
+                        // evbuffer_ptr_memcmp比较整个字符串。如果有需要的话，该函数会跨
+                        // evbuffer_chain进行比较，但不会修改pos。如果成功匹配，那么返回0
 			if (!evbuffer_ptr_memcmp(buffer, &pos, what, len)) {
+                                // 虽然匹配成功了，但可能是用到了end之后的链表数据。这也等于没有找到
 				if (end && pos.pos + (ev_ssize_t)len > end->pos)
 					goto not_found;
 				else
 					goto done;
 			}
+                        // 跳过这个等于what[0]的字符
 			++pos.pos;
 			++pos.internal_.pos_in_chain;
+                        // 这个evbuffer_chain已经全部都对比过了,没有发现目标，则取下一个chain
 			if (pos.internal_.pos_in_chain == chain->off) {
 				chain = pos.internal_.chain = chain->next;
 				pos.internal_.pos_in_chain = 0;
 			}
 		} else {
+                        // 这个evbuffer_chain都没有找到what[0]
 			if (chain == last_chain)
 				goto not_found;
+                        // 此时直接跳过这个evbuffer_chain
 			pos.pos += chain->off - pos.internal_.pos_in_chain;
 			chain = pos.internal_.chain = chain->next;
+                        // 下一个chain从0开始
 			pos.internal_.pos_in_chain = 0;
 		}
 	}
@@ -3353,11 +3569,14 @@ evbuffer_add_file(struct evbuffer *buf, int fd, ev_off_t offset, ev_off_t length
 	return r;
 }
 
+// 设置evbuffer_cb类型的回调函数(已不推荐使用)
+// 设置这个前要先删除之前添加的所有回调函数
 void
 evbuffer_setcb(struct evbuffer *buffer, evbuffer_cb cb, void *cbarg)
 {
 	EVBUFFER_LOCK(buffer);
 
+        // 清空之前的回调函数
 	if (!LIST_EMPTY(&buffer->callbacks))
 		evbuffer_remove_all_callbacks(buffer);
 
@@ -3370,6 +3589,7 @@ evbuffer_setcb(struct evbuffer *buffer, evbuffer_cb cb, void *cbarg)
 	EVBUFFER_UNLOCK(buffer);
 }
 
+// 设置buffer的回调函数
 struct evbuffer_cb_entry *
 evbuffer_add_cb(struct evbuffer *buffer, evbuffer_cb_func cb, void *cbarg)
 {
@@ -3379,12 +3599,14 @@ evbuffer_add_cb(struct evbuffer *buffer, evbuffer_cb_func cb, void *cbarg)
 	EVBUFFER_LOCK(buffer);
 	e->cb.cb_func = cb;
 	e->cbarg = cbarg;
+        // 允许回调标志位
 	e->flags = EVBUFFER_CB_ENABLED;
-	LIST_INSERT_HEAD(&buffer->callbacks, e, next);
+        LIST_INSERT_HEAD(&buffer->callbacks, e, next);
 	EVBUFFER_UNLOCK(buffer);
 	return e;
 }
 
+// 从队列中删除这个回调函数
 int
 evbuffer_remove_cb_entry(struct evbuffer *buffer,
 			 struct evbuffer_cb_entry *ent)
@@ -3396,6 +3618,7 @@ evbuffer_remove_cb_entry(struct evbuffer *buffer,
 	return 0;
 }
 
+// 根据用户设置的回调函数和回调参数这两个量 从队列中删除
 int
 evbuffer_remove_cb(struct evbuffer *buffer, evbuffer_cb_func cb, void *cbarg)
 {
@@ -3413,6 +3636,7 @@ done:
 	return result;
 }
 
+// 设置evbuffer回调函数的标志
 int
 evbuffer_cb_set_flags(struct evbuffer *buffer,
 		      struct evbuffer_cb_entry *cb, ev_uint32_t flags)
@@ -3425,6 +3649,7 @@ evbuffer_cb_set_flags(struct evbuffer *buffer,
 	return 0;
 }
 
+// 清除evbuffer回调函数的某个标志
 int
 evbuffer_cb_clear_flags(struct evbuffer *buffer,
 		      struct evbuffer_cb_entry *cb, ev_uint32_t flags)

@@ -59,19 +59,25 @@ extern "C" {
 
 /** A single evbuffer callback for an evbuffer. This function will be invoked
  * when bytes are added to or removed from the evbuffer. */
+// 内部结构体，结构体成员对用户透明
+// evbuffer的单个evbuffer回调。
+// 当在evbuffer中添加或删除字节时，将调用此函数
 struct evbuffer_cb_entry {
 	/** Structures to implement a doubly-linked queue of callbacks */
 	LIST_ENTRY(evbuffer_cb_entry) next;
 	/** The callback function to invoke when this callback is called.
 	    If EVBUFFER_CB_OBSOLETE is set in flags, the cb_obsolete field is
 	    valid; otherwise, cb_func is valid. */
+    // 哪个回调类型。一般都是evbuffer_cb_func
 	union {
 		evbuffer_cb_func cb_func;
 		evbuffer_cb cb_obsolete;
 	} cb;
 	/** Argument to pass to cb. */
+    // 回调函数的参数
 	void *cbarg;
 	/** Currently set flags on this callback. */
+    // 该回调的标志
 	ev_uint32_t flags;
 };
 
@@ -110,9 +116,11 @@ struct evbuffer {
 
 	/** Number of bytes we have added to the buffer since we last tried to
 	 * invoke callbacks. */
+    // 上一次添加到buf中的字节数
 	size_t n_add_for_cb;
 	/** Number of bytes we have removed from the buffer since we last
 	 * tried to invoke callbacks. */
+    // 上一次移除buf中的字节数
 	size_t n_del_for_cb;
 
 #ifndef EVENT__DISABLE_THREAD_SUPPORT
@@ -124,9 +132,11 @@ struct evbuffer {
 	unsigned own_lock : 1;
 	/** True iff we should not allow changes to the front of the buffer
 	 * (drains or prepends). */
+    // 禁止在头部添加数据
 	unsigned freeze_start : 1;
 	/** True iff we should not allow changes to the end of the buffer
 	 * (appends) */
+    // 禁止在尾部添加数据
 	unsigned freeze_end : 1;
 	/** True iff this evbuffer's callbacks are not invoked immediately
 	 * upon a change in the buffer, but instead are deferred to be invoked
@@ -155,6 +165,7 @@ struct evbuffer {
 	struct event_callback deferred;
 
 	/** A doubly-linked-list of callback functions */
+    // buffer的回调函数
 	LIST_HEAD(evbuffer_cb_queue, evbuffer_cb_entry) callbacks;
 
 	/** The parent bufferevent object this evbuffer belongs to.
