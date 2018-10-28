@@ -151,14 +151,18 @@ struct bufferevent_rate_limit {
 
 /** Parts of the bufferevent structure that are shared among all bufferevent
  * types, but not exposed in bufferevent_struct.h. */
+// 在所有bufferevent类型之间共享的bufferevent结构的一部分，
+// 但不在bufferevent_struct.h中公开
 struct bufferevent_private {
 	/** The underlying bufferevent structure. */
 	struct bufferevent bev;
 
 	/** Evbuffer callback to enforce watermarks on input. */
+    // 设置input evbuffer的高水位时，需要一个evbuffer回调函数配合工作
 	struct evbuffer_cb_entry *read_watermarks_cb;
 
 	/** If set, we should free the lock when we free the bufferevent. */
+    // 锁是Libevent自动分配的，还是用户分配的
 	unsigned own_lock : 1;
 
 	/** Flag: set if we have deferred callbacks and a read callback is
@@ -168,9 +172,11 @@ struct bufferevent_private {
 	 * pending. */
 	unsigned writecb_pending : 1;
 	/** Flag: set if we are currently busy connecting. */
+    // 这个socket是否处于正在连接服务器状态
 	unsigned connecting : 1;
 	/** Flag: set if a connect failed prematurely; this is a hack for
 	 * getting around the bufferevent abstraction. */
+    // 标志连接被拒绝
 	unsigned connection_refused : 1;
 	/** Set to the events pending if we have deferred callbacks and
 	 * an events callback is pending. */
@@ -179,11 +185,13 @@ struct bufferevent_private {
 	/** If set, read is suspended until one or more conditions are over.
 	 * The actual value here is a bitfield of those conditions; see the
 	 * BEV_SUSPEND_* flags above. */
+    // 标志是什么原因把 读 挂起来
 	bufferevent_suspend_flags read_suspended;
 
 	/** If set, writing is suspended until one or more conditions are over.
 	 * The actual value here is a bitfield of those conditions; see the
 	 * BEV_SUSPEND_* flags above. */
+    // 标志是什么原因把 写 挂起来
 	bufferevent_suspend_flags write_suspended;
 
 	/** Set to the current socket errno if we have deferred callbacks and
@@ -200,10 +208,12 @@ struct bufferevent_private {
 	enum bufferevent_options options;
 
 	/** Current reference count for this bufferevent. */
+    // bufferevent的引用计数
 	int refcnt;
 
 	/** Lock for this bufferevent.  Shared by the inbuf and the outbuf.
 	 * If NULL, locking is disabled. */
+    // 锁变量
 	void *lock;
 
 	/** No matter how big our bucket gets, don't try to read more than this
@@ -250,8 +260,10 @@ union bufferevent_ctrl_data {
    Implementation table for a bufferevent: holds function pointers and other
    information to make the various bufferevent types work.
 */
+// bufferevent的实现表：保存函数指针和其他信息，以使各种bufferevent类型工作
 struct bufferevent_ops {
 	/** The name of the bufferevent's type. */
+    // 类型名称
 	const char *type;
 	/** At what offset into the implementation type will we find a
 	    bufferevent structure?
@@ -263,18 +275,21 @@ struct bufferevent_ops {
 	    }
 	    then mem_offset should be offsetof(struct bufferevent_x, bev)
 	*/
+    // 成员bev的偏移量
 	off_t mem_offset;
 
 	/** Enables one or more of EV_READ|EV_WRITE on a bufferevent.  Does
 	    not need to adjust the 'enabled' field.  Returns 0 on success, -1
 	    on failure.
 	 */
+    // 启动。将event加入到event_base中
 	int (*enable)(struct bufferevent *, short);
 
 	/** Disables one or more of EV_READ|EV_WRITE on a bufferevent.  Does
 	    not need to adjust the 'enabled' field.  Returns 0 on success, -1
 	    on failure.
 	 */
+    // 关闭。将event从event_base中删除
 	int (*disable)(struct bufferevent *, short);
 
 	/** Detatches the bufferevent from related data structures. Called as
@@ -285,15 +300,18 @@ struct bufferevent_ops {
 	    in this implementation. Called when the bufferevent is
 	    finalized.
 	 */
+    // 销毁
 	void (*destruct)(struct bufferevent *);
 
 	/** Called when the timeouts on the bufferevent have changed.*/
+    // 调整event的超时值
 	int (*adj_timeouts)(struct bufferevent *);
 
 	/** Called to flush data. */
 	int (*flush)(struct bufferevent *, short, enum bufferevent_flush_mode);
 
 	/** Called to access miscellaneous fields. */
+    // 获取成员的值
 	int (*ctrl)(struct bufferevent *, enum bufferevent_ctrl_op, union bufferevent_ctrl_data *);
 
 };
@@ -330,6 +348,7 @@ void bufferevent_suspend_write_(struct bufferevent *bufev, bufferevent_suspend_f
  * writing if there are no conditions left. */
 void bufferevent_unsuspend_write_(struct bufferevent *bufev, bufferevent_suspend_flags what);
 
+// 挂起bufferevent读事件，和恢复读事件
 #define bufferevent_wm_suspend_read(b) \
 	bufferevent_suspend_read_((b), BEV_SUSPEND_WM)
 #define bufferevent_wm_unsuspend_read(b) \
@@ -386,6 +405,7 @@ static inline void bufferevent_trigger_nolock_(struct bufferevent *bufev, short 
 
 /* Making this inline since all of the common-case calls to this function in
  * libevent use constant arguments. */
+// 调用用户设置的bufferevent读、写回调函数
 static inline void
 bufferevent_trigger_nolock_(struct bufferevent *bufev, short iotype, int options)
 {

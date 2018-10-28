@@ -2730,8 +2730,8 @@ evbuffer_write_sendfile(struct evbuffer *buffer, evutil_socket_t dest_fd,
 }
 #endif
 
-// 把buffer的数据写入fd中
-// howmuch是要写的字节数。如果小于0，那么就把buffer里的所有数据都写入fd
+// 把buffer的数据写入fd中,howmuch是要写的字节数,并删除以写入的数据
+// 如果howmuch小于0，那么就把buffer里的所有数据都写入fd
 int
 evbuffer_write_atmost(struct evbuffer *buffer, evutil_socket_t fd,
     ev_ssize_t howmuch)
@@ -3601,7 +3601,7 @@ evbuffer_add_cb(struct evbuffer *buffer, evbuffer_cb_func cb, void *cbarg)
 	e->cbarg = cbarg;
         // 允许回调标志位
 	e->flags = EVBUFFER_CB_ENABLED;
-        LIST_INSERT_HEAD(&buffer->callbacks, e, next);
+    LIST_INSERT_HEAD(&buffer->callbacks, e, next);
 	EVBUFFER_UNLOCK(buffer);
 	return e;
 }

@@ -63,18 +63,22 @@
 static void bufferevent_cancel_all_(struct bufferevent *bev);
 static void bufferevent_finalize_cb_(struct event_callback *evcb, void *arg_);
 
+// 把监听读事件的event挂起来，记录被挂起的原因what
 void
 bufferevent_suspend_read_(struct bufferevent *bufev, bufferevent_suspend_flags what)
 {
 	struct bufferevent_private *bufev_private =
 	    EVUTIL_UPCAST(bufev, struct bufferevent_private, bev);
 	BEV_LOCK(bufev);
+    // 之前没有挂起过才会执行be_socket_disable函数
 	if (!bufev_private->read_suspended)
-		bufev->be_ops->disable(bufev, EV_READ);
+        bufev->be_ops->disable(bufev, EV_READ);
+    // 记录因何而被挂起
 	bufev_private->read_suspended |= what;
 	BEV_UNLOCK(bufev);
 }
 
+// 恢复因what原因被挂起的读event
 void
 bufferevent_unsuspend_read_(struct bufferevent *bufev, bufferevent_suspend_flags what)
 {
@@ -82,6 +86,7 @@ bufferevent_unsuspend_read_(struct bufferevent *bufev, bufferevent_suspend_flags
 	    EVUTIL_UPCAST(bufev, struct bufferevent_private, bev);
 	BEV_LOCK(bufev);
 	bufev_private->read_suspended &= ~what;
+    // 重新把event插入到event_base中
 	if (!bufev_private->read_suspended && (bufev->enabled & EV_READ))
 		bufev->be_ops->enable(bufev, EV_READ);
 	BEV_UNLOCK(bufev);
@@ -124,6 +129,7 @@ bufferevent_inbuf_wm_cb(struct evbuffer *buf,
 
 	size = evbuffer_get_length(buf);
 
+    // 如果达到了高水位标志，则挂起读事件，否则恢复读事件
 	if (size >= bufev->wm_read.high)
 		bufferevent_wm_suspend_read(bufev);
 	else
@@ -262,6 +268,7 @@ bufferevent_trigger(struct bufferevent *bufev, short iotype, int options)
 	bufferevent_decref_and_unlock_(bufev);
 }
 
+// 执行bufferevent的错误处理回调函数
 void
 bufferevent_run_eventcb_(struct bufferevent *bufev, short what, int options)
 {
@@ -287,6 +294,7 @@ bufferevent_trigger_event(struct bufferevent *bufev, short what, int options)
 	bufferevent_decref_and_unlock_(bufev);
 }
 
+// 完成公有部分的初始化,会新建一个输入和输出缓存区
 int
 bufferevent_init_common_(struct bufferevent_private *bufev_private,
     struct event_base *base,
@@ -295,11 +303,13 @@ bufferevent_init_common_(struct bufferevent_private *bufev_private,
 {
 	struct bufferevent *bufev = &bufev_private->bev;
 
+    // 分配输入缓冲区
 	if (!bufev->input) {
 		if ((bufev->input = evbuffer_new()) == NULL)
 			return -1;
 	}
 
+    // 分配输出缓冲区
 	if (!bufev->output) {
 		if ((bufev->output = evbuffer_new()) == NULL) {
 			evbuffer_free(bufev->input);
@@ -311,6 +321,7 @@ bufferevent_init_common_(struct bufferevent_private *bufev_private,
 	bufev->ev_base = base;
 
 	/* Disable timeouts. */
+    // 默认情况下,读和写event都是不支持超时的
 	evutil_timerclear(&bufev->timeout_read);
 	evutil_timerclear(&bufev->timeout_write);
 
@@ -323,6 +334,7 @@ bufferevent_init_common_(struct bufferevent_private *bufev_private,
 	 * trigger a callback.  Reading needs to be explicitly enabled
 	 * because otherwise no data will be available.
 	 */
+    // 默认支持可写
 	bufev->enabled = EV_WRITE;
 
 #ifndef EVENT__DISABLE_THREAD_SUPPORT
@@ -357,12 +369,14 @@ bufferevent_init_common_(struct bufferevent_private *bufev_private,
 
 	bufev_private->options = options;
 
+    // 将evbuffer和bufferevent相关联
 	evbuffer_set_parent_(bufev->input, bufev);
 	evbuffer_set_parent_(bufev->output, bufev);
 
 	return 0;
 }
 
+// 设置bufferevent回调函数
 void
 bufferevent_setcb(struct bufferevent *bufev,
     bufferevent_data_cb readcb, bufferevent_data_cb writecb,
@@ -426,6 +440,7 @@ bufferevent_get_priority(const struct bufferevent *bufev)
 	}
 }
 
+// 把data写入到output缓冲区
 int
 bufferevent_write(struct bufferevent *bufev, const void *data, size_t size)
 {
@@ -456,6 +471,7 @@ bufferevent_read_buffer(struct bufferevent *bufev, struct evbuffer *buf)
 	return (evbuffer_add_buffer(buf, bufev->input));
 }
 
+// 类似于event_add，使得bufferevent能工作
 int
 bufferevent_enable(struct bufferevent *bufev, short event)
 {
@@ -464,7 +480,9 @@ bufferevent_enable(struct bufferevent *bufev, short event)
 	short impl_events = event;
 	int r = 0;
 
+    // 增加引用并加锁,为了防止其他线程调用bufferevent_free，释放了bufferevent
 	bufferevent_incref_and_lock_(bufev);
+    // 挂起了读/写，则不能监听读/写事件
 	if (bufev_private->read_suspended)
 		impl_events &= ~EV_READ;
 	if (bufev_private->write_suspended)
@@ -472,13 +490,16 @@ bufferevent_enable(struct bufferevent *bufev, short event)
 
 	bufev->enabled |= event;
 
+    // enable，使得能工作,对于socket bufferevent是be_socket_enable
 	if (impl_events && bufev->be_ops->enable(bufev, impl_events) < 0)
 		r = -1;
 
+    // 减少引用并解锁
 	bufferevent_decref_and_unlock_(bufev);
 	return r;
 }
 
+// 设置bufferevent读/写事件的超时
 int
 bufferevent_set_timeouts(struct bufferevent *bufev,
 			 const struct timeval *tv_read,
@@ -565,7 +586,9 @@ bufferevent_disable(struct bufferevent *bufev, short event)
 /*
  * Sets the water marks
  */
-
+// 设置events事件(读或写)的低、高水位标志
+// 读事件的低水位: 当可读的数据量到达这个低水位后，才会调用用户设置的回调函数
+// 读事件的高水位: 把读事件的evbuffer的数据量限制在高水位之下,控制evbuffer的大小
 void
 bufferevent_setwatermark(struct bufferevent *bufev, short events,
     size_t lowmark, size_t highmark)
@@ -587,7 +610,7 @@ bufferevent_setwatermark(struct bufferevent *bufev, short events,
 			/* There is now a new high-water mark for read.
 			   enable the callback if needed, and see if we should
 			   suspend/bufferevent_wm_unsuspend. */
-
+            // 若没设置高水位的读回调函数,则添加回调
 			if (bufev_private->read_watermarks_cb == NULL) {
 				bufev_private->read_watermarks_cb =
 				    evbuffer_add_cb(bufev->input,
@@ -598,12 +621,16 @@ bufferevent_setwatermark(struct bufferevent *bufev, short events,
 				      bufev_private->read_watermarks_cb,
 				      EVBUFFER_CB_ENABLED|EVBUFFER_CB_NODEFER);
 
+            // 设置(修改)高水位时，evbuffer的数据量已经超过了水位值
+            // 可能是把之前的高水位调高或者调低了
+            // 挂起操作和取消挂起操作都是幂等的(即多次挂起的作用等同于挂起一次)
 			if (evbuffer_get_length(bufev->input) >= highmark)
 				bufferevent_wm_suspend_read(bufev);
 			else if (evbuffer_get_length(bufev->input) < highmark)
 				bufferevent_wm_unsuspend_read(bufev);
 		} else {
 			/* There is now no high-water mark for read. */
+            // 高水位值等于0，那么就要取消挂起 读事件
 			if (bufev_private->read_watermarks_cb)
 				evbuffer_cb_clear_flags(bufev->input,
 				    bufev_private->read_watermarks_cb,
@@ -653,6 +680,7 @@ bufferevent_flush(struct bufferevent *bufev,
 	return r;
 }
 
+// 加锁并增加引用计数
 void
 bufferevent_incref_and_lock_(struct bufferevent *bufev)
 {
@@ -842,6 +870,7 @@ bufferevent_enable_locking_(struct bufferevent *bufev, void *lock)
 #endif
 }
 
+// 设置bev对应的fd为指定fd
 int
 bufferevent_setfd(struct bufferevent *bev, evutil_socket_t fd)
 {
@@ -855,6 +884,7 @@ bufferevent_setfd(struct bufferevent *bev, evutil_socket_t fd)
 	return res;
 }
 
+// 获取bufferevent对应的fd
 evutil_socket_t
 bufferevent_getfd(struct bufferevent *bev)
 {
@@ -968,10 +998,12 @@ bufferevent_generic_adj_timeouts_(struct bufferevent *bev)
 	return 0;
 }
 
+// 调整bufferevent的读写事件的超时值
 int
 bufferevent_generic_adj_existing_timeouts_(struct bufferevent *bev)
 {
 	int r = 0;
+    // 用户监听了读事件
 	if (event_pending(&bev->ev_read, EV_READ, NULL)) {
 		if (evutil_timerisset(&bev->timeout_read)) {
 			    if (bufferevent_add_event_(&bev->ev_read, &bev->timeout_read) < 0)
@@ -980,6 +1012,7 @@ bufferevent_generic_adj_existing_timeouts_(struct bufferevent *bev)
 			event_remove_timer(&bev->ev_read);
 		}
 	}
+    // 用户监听了写事件
 	if (event_pending(&bev->ev_write, EV_WRITE, NULL)) {
 		if (evutil_timerisset(&bev->timeout_write)) {
 			if (bufferevent_add_event_(&bev->ev_write, &bev->timeout_write) < 0)
@@ -991,6 +1024,7 @@ bufferevent_generic_adj_existing_timeouts_(struct bufferevent *bev)
 	return r;
 }
 
+// bufferevent的事件注册
 int
 bufferevent_add_event_(struct event *ev, const struct timeval *tv)
 {

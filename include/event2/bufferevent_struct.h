@@ -72,28 +72,35 @@ struct bufferevent {
 	struct event_base *ev_base;
 	/** Pointer to a table of function pointers to set up how this
 	    bufferevent behaves. */
+    // 操作结构体，成员有一些函数指针。类似struct eventop结构体
 	const struct bufferevent_ops *be_ops;
 
 	/** A read event that triggers when a timeout has happened or a socket
 	    is ready to read data.  Only used by some subtypes of
 	    bufferevent. */
+    // 监听同一个fd的可读事件
 	struct event ev_read;
 	/** A write event that triggers when a timeout has happened or a socket
 	    is ready to write data.  Only used by some subtypes of
 	    bufferevent. */
+    // 监听同一个fd的可写事件
 	struct event ev_write;
 
 	/** An input buffer. Only the bufferevent is allowed to add data to
 	    this buffer, though the user is allowed to drain it. */
+    // 读缓冲区
 	struct evbuffer *input;
 
 	/** An input buffer. Only the bufferevent is allowed to drain data
 	    from this buffer, though the user is allowed to add it. */
+    // 写缓冲区
 	struct evbuffer *output;
 
+    // 读水位,写水位
 	struct event_watermark wm_read;
 	struct event_watermark wm_write;
 
+    // 可读、可写、错误发生时的回调函数指针
 	bufferevent_data_cb readcb;
 	bufferevent_data_cb writecb;
 	/* This should be called 'eventcb', but renaming it would break
@@ -101,6 +108,7 @@ struct bufferevent {
 	bufferevent_event_cb errorcb;
 	void *cbarg;
 
+    // 读、写事件event的超时值
 	struct timeval timeout_read;
 	struct timeval timeout_write;
 

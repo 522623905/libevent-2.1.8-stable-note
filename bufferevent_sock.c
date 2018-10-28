@@ -84,6 +84,7 @@ static int be_socket_ctrl(struct bufferevent *, enum bufferevent_ctrl_op, union 
 
 static void be_socket_setfd(struct bufferevent *, evutil_socket_t);
 
+// bufferevent socket相关操作函数
 const struct bufferevent_ops bufferevent_ops_socket = {
 	"socket",
 	evutil_offsetof(struct bufferevent_private, bev),
@@ -104,6 +105,7 @@ bufferevent_socket_get_conn_address_(struct bufferevent *bev)
 
 	return (struct sockaddr *)&bev_p->conn_address;
 }
+// 根据fd设置bev_p中的客户端addr
 static void
 bufferevent_socket_set_conn_address_fd(struct bufferevent_private *bev_p, int fd)
 {
@@ -121,6 +123,7 @@ bufferevent_socket_set_conn_address(struct bufferevent_private *bev_p,
 	memcpy(&bev_p->conn_address, addr, addrlen);
 }
 
+// 当bufferevent的写缓冲区output的数据发生变化时，被调用
 static void
 bufferevent_socket_outbuf_cb(struct evbuffer *buf,
     const struct evbuffer_cb_info *cbinfo,
@@ -130,18 +133,20 @@ bufferevent_socket_outbuf_cb(struct evbuffer *buf,
 	struct bufferevent_private *bufev_p =
 	    EVUTIL_UPCAST(bufev, struct bufferevent_private, bev);
 
-	if (cbinfo->n_added &&
-	    (bufev->enabled & EV_WRITE) &&
-	    !event_pending(&bufev->ev_write, EV_WRITE, NULL) &&
-	    !bufev_p->write_suspended) {
+    if (cbinfo->n_added &&  // evbuffer添加了数据
+        (bufev->enabled & EV_WRITE) && // 默认情况下是enable EV_WRITE的
+        !event_pending(&bufev->ev_write, EV_WRITE, NULL) && //这个event已经被踢出event_base了
+        !bufev_p->write_suspended) { // 这个bufferevent的写并没有被挂起
 		/* Somebody added data to the buffer, and we would like to
 		 * write, and we were not writing.  So, start writing. */
+        // 把这个event添加到event_base中
 		if (bufferevent_add_event_(&bufev->ev_write, &bufev->timeout_write) == -1) {
 		    /* Should we log this? */
 		}
 	}
 }
 
+// bufferevent的读回调函数，从socket中读取数据，再调用用户自己的回调函数
 static void
 bufferevent_readcb(evutil_socket_t fd, short event, void *arg)
 {
@@ -169,6 +174,7 @@ bufferevent_readcb(evutil_socket_t fd, short event, void *arg)
 	 * If we have a high watermark configured then we don't want to
 	 * read more data than would make us reach the watermark.
 	 */
+    // 达到了高水位标志，则挂起读
 	if (bufev->wm_read.high != 0) {
 		howmuch = bufev->wm_read.high - evbuffer_get_length(input);
 		/* we somehow lowered the watermark, stop reading */
@@ -177,13 +183,19 @@ bufferevent_readcb(evutil_socket_t fd, short event, void *arg)
 			goto done;
 		}
 	}
+    // 因为用户可以限速，所以这里要检测最大的可读大小。
+    // 如果没有限速的话，那么将返回16384字节，即16K
+    // 默认情况下是没有限速的。
 	readmax = bufferevent_get_read_max_(bufev_p);
 	if (howmuch < 0 || howmuch > readmax) /* The use of -1 for "unlimited"
 					       * uglifies this code. XXXX */
 		howmuch = readmax;
+    // 一些原因导致读 被挂起，比如加锁了
 	if (bufev_p->read_suspended)
 		goto done;
 
+    // 解冻，使得可以在input的后面追加数据
+    // 从socket fd中读取数据 , 读取完毕，继续冻结
 	evbuffer_unfreeze(input, 0);
 	res = evbuffer_read(input, fd, (int)howmuch); /* XXXX evbuffer_read would do better to take and return ev_ssize_t */
 	evbuffer_freeze(input, 0);
@@ -197,18 +209,23 @@ bufferevent_readcb(evutil_socket_t fd, short event, void *arg)
 			goto done;
 		}
 		/* error case */
+        // 不是 EINTER or EAGAIN 这两个可以重试的错误，那么就应该是其他致命的错误
+        // 此时，应该报告给用户
 		what |= BEV_EVENT_ERROR;
 	} else if (res == 0) {
 		/* eof case */
+        // 断开了连接
 		what |= BEV_EVENT_EOF;
 	}
 
 	if (res <= 0)
 		goto error;
 
+    // 速率相关的操作
 	bufferevent_decrement_read_buckets_(bufev_p, res);
 
 	/* Invoke the user callback - must always be called last */
+    // 调用用户设置的回调函数
 	bufferevent_trigger_nolock_(bufev, EV_READ, 0);
 
 	goto done;
@@ -217,6 +234,8 @@ bufferevent_readcb(evutil_socket_t fd, short event, void *arg)
 	goto done;
 
  error:
+    // 把监听可读事件的event从event_base的事件队列中删除掉.event_del
+    // 会调用be_socket_disable和用户设置的错误处理函数
 	bufferevent_disable(bufev, EV_READ);
 	bufferevent_run_eventcb_(bufev, what, 0);
 
@@ -224,6 +243,7 @@ bufferevent_readcb(evutil_socket_t fd, short event, void *arg)
 	bufferevent_decref_and_unlock_(bufev);
 }
 
+// bufferevent可写的回调函数
 static void
 bufferevent_writecb(evutil_socket_t fd, short event, void *arg)
 {
@@ -244,7 +264,12 @@ bufferevent_writecb(evutil_socket_t fd, short event, void *arg)
 		what |= BEV_EVENT_TIMEOUT;
 		goto error;
 	}
+    // 判断这个socket是否已经连接上服务器了
+    // 由于是非阻塞的，因此判断成功连接上了的一个方法是判断这个sockfd是否可写
 	if (bufev_p->connecting) {
+        // c等于1，说明已经连接成功
+        // c等于0，说明还没连接上
+        // c等于-1，说明发生错误
 		int c = evutil_socket_finished_connecting_(fd);
 		/* we need to fake the error if the connection was refused
 		 * immediately - usually connection to localhost on BSD */
@@ -253,16 +278,19 @@ bufferevent_writecb(evutil_socket_t fd, short event, void *arg)
 			c = -1;
 		}
 
+        // 还没连接上，直接返回会继续监听可写
 		if (c == 0)
 			goto done;
 
 		bufev_p->connecting = 0;
 		if (c < 0) {
+            // 连接出错
 			event_del(&bufev->ev_write);
 			event_del(&bufev->ev_read);
 			bufferevent_run_eventcb_(bufev, BEV_EVENT_ERROR, 0);
 			goto done;
 		} else {
+            // 连接成功
 			connected = 1;
 			bufferevent_socket_set_conn_address_fd(bufev_p, fd);
 #ifdef _WIN32
@@ -284,17 +312,24 @@ bufferevent_writecb(evutil_socket_t fd, short event, void *arg)
 		}
 	}
 
+    // 用户可能设置了限速，如果没有限速，那么atmost将返回16384(16K)
 	atmost = bufferevent_get_write_max_(bufev_p);
 
+    // 一些原因导致写被挂起来了
 	if (bufev_p->write_suspended)
 		goto done;
 
+    // 如果evbuffer有数据可以写到sockfd中
 	if (evbuffer_get_length(bufev->output)) {
+        // 解冻链表头
 		evbuffer_unfreeze(bufev->output, 1);
+        // 将output这个evbuffer的数据写到socket fd 的缓冲区中
+        // 会把已经写到socket fd缓冲区的数据，从evbuffer中删除
 		res = evbuffer_write_atmost(bufev->output, fd, atmost);
 		evbuffer_freeze(bufev->output, 1);
 		if (res == -1) {
 			int err = evutil_socket_geterror(fd);
+            // 可以恢复的错误。一般是EINTR或者EAGAIN
 			if (EVUTIL_ERR_RW_RETRIABLE(err))
 				goto reschedule;
 			what |= BEV_EVENT_ERROR;
@@ -303,6 +338,7 @@ bufferevent_writecb(evutil_socket_t fd, short event, void *arg)
 			   XXXX Actually, a 0 on write doesn't indicate
 			   an EOF. An ECONNRESET might be more typical.
 			 */
+            // 该socket已经断开连接了
 			what |= BEV_EVENT_EOF;
 		}
 		if (res <= 0)
@@ -311,6 +347,8 @@ bufferevent_writecb(evutil_socket_t fd, short event, void *arg)
 		bufferevent_decrement_write_buckets_(bufev_p, res);
 	}
 
+    // 如果把写缓冲区的数据都写完成了,为了防止event_base不断地触发可写事件，此时要把这个监听可写的event删除;
+    // 如果还没写完所有的数据,那么就不能delete这个event，而是要继续监听可写事情，直到把所有的数据都写到sockfd中
 	if (evbuffer_get_length(bufev->output) == 0) {
 		event_del(&bufev->ev_write);
 	}
@@ -319,6 +357,7 @@ bufferevent_writecb(evutil_socket_t fd, short event, void *arg)
 	 * Invoke the user callback if our buffer is drained or below the
 	 * low watermark.
 	 */
+    // 如果缓冲区小于设置的低水位值，那么就会调用用户设置的写事件回调函数
 	if (res || !connected) {
 		bufferevent_trigger_nolock_(bufev, EV_WRITE, 0);
 	}
@@ -332,6 +371,7 @@ bufferevent_writecb(evutil_socket_t fd, short event, void *arg)
 	goto done;
 
  error:
+    // 有错误。把这个写event删除
 	bufferevent_disable(bufev, EV_WRITE);
 	bufferevent_run_eventcb_(bufev, what, 0);
 
@@ -339,6 +379,7 @@ bufferevent_writecb(evutil_socket_t fd, short event, void *arg)
 	bufferevent_decref_and_unlock_(bufev);
 }
 
+// 创建用于socket的bufferevent
 struct bufferevent *
 bufferevent_socket_new(struct event_base *base, evutil_socket_t fd,
     int options)
@@ -354,27 +395,38 @@ bufferevent_socket_new(struct event_base *base, evutil_socket_t fd,
 	if ((bufev_p = mm_calloc(1, sizeof(struct bufferevent_private)))== NULL)
 		return NULL;
 
+    // 完成公有部分的初始化,会新建一个输入和输出缓存区
 	if (bufferevent_init_common_(bufev_p, base, &bufferevent_ops_socket,
 				    options) < 0) {
 		mm_free(bufev_p);
 		return NULL;
 	}
 	bufev = &bufev_p->bev;
+    // 设置标志位将evbuffer的数据向fd传
 	evbuffer_set_flags(bufev->output, EVBUFFER_FLAG_DRAINS_TO_FD);
 
+    // 将fd与event相关联，设置读写回调函数
 	event_assign(&bufev->ev_read, bufev->ev_base, fd,
 	    EV_READ|EV_PERSIST|EV_FINALIZE, bufferevent_readcb, bufev);
 	event_assign(&bufev->ev_write, bufev->ev_base, fd,
 	    EV_WRITE|EV_PERSIST|EV_FINALIZE, bufferevent_writecb, bufev);
 
+    // 设置evbuffer的回调函数，使得外界给写缓冲区添加数据时，能触发
+    // 写操作，这个回调对于写事件的监听是很重要的
 	evbuffer_add_cb(bufev->output, bufferevent_socket_outbuf_cb, bufev);
 
+    // 冻结读缓冲区的尾部，未解冻之前不能往读缓冲区追加数据
+    // 也就是说不能从socket fd中读取数据
 	evbuffer_freeze(bufev->input, 0);
+
+    // 冻结写缓冲区的头部，未解冻之前不能把写缓冲区的头部数据删除
+    // 也就是说不能把数据写到socket fd
 	evbuffer_freeze(bufev->output, 1);
 
 	return bufev;
 }
 
+// 申请一个非阻塞sockfd，接着就connect sa对应的服务器
 int
 bufferevent_socket_connect(struct bufferevent *bev,
     const struct sockaddr *sa, int socklen)
@@ -392,7 +444,9 @@ bufferevent_socket_connect(struct bufferevent *bev,
 	if (!bufev_p)
 		goto done;
 
+    // 获取bufferevent的fd
 	fd = bufferevent_getfd(bev);
+    // 如果没有设置,则创建sockfd并设置非阻塞
 	if (fd < 0) {
 		if (!sa)
 			goto done;
@@ -414,6 +468,7 @@ bufferevent_socket_connect(struct bufferevent *bev,
 			goto done;
 		} else
 #endif
+        // 非阻塞connect
 		r = evutil_socket_connect_(&fd, sa, socklen);
 		if (r < 0)
 			goto freesock;
@@ -427,20 +482,27 @@ bufferevent_socket_connect(struct bufferevent *bev,
 		    EV_WRITE|EV_PERSIST|EV_FINALIZE, bufferevent_writecb, bev);
 	}
 #endif
-	bufferevent_setfd(bev, fd);
-	if (r == 0) {
+    // 设置fd为bev中的fd
+    bufferevent_setfd(bev, fd);
+
+    if (r == 0) {
+        // 暂时还没连接上，因为fd是非阻塞的
+        // 此时需要监听可写事件，当可写了，并且没有错误的话，就成功连接上了
 		if (! be_socket_enable(bev, EV_WRITE)) {
+            // 标志正在连接
 			bufev_p->connecting = 1;
 			result = 0;
 			goto done;
 		}
-	} else if (r == 1) {
+    } else if (r == 1) {
 		/* The connect succeeded already. How very BSD of it. */
+        //已经连接上了，则手动激活这个event，调用写回调函数
 		result = 0;
-		bufev_p->connecting = 1;
+        bufev_p->connecting = 1;
 		bufferevent_trigger_nolock_(bev, EV_WRITE, BEV_OPT_DEFER_CALLBACKS);
-	} else {
+    } else {
 		/* The connect failed already.  How very BSD of it. */
+        // 拒绝连接,则执行错误处理回调函数
 		result = 0;
 		bufferevent_run_eventcb_(bev, BEV_EVENT_ERROR, BEV_OPT_DEFER_CALLBACKS);
 		bufferevent_disable(bev, EV_WRITE|EV_READ);
@@ -571,7 +633,7 @@ bufferevent_new(evutil_socket_t fd,
 	return bufev;
 }
 
-
+// 注册socket bufferevent的读写事件
 static int
 be_socket_enable(struct bufferevent *bufev, short event)
 {
@@ -584,6 +646,7 @@ be_socket_enable(struct bufferevent *bufev, short event)
 	return 0;
 }
 
+// 删除socket bufferevent的读写事件
 static int
 be_socket_disable(struct bufferevent *bufev, short event)
 {

@@ -523,6 +523,8 @@ evutil_socket_geterror(evutil_socket_t sock)
 
 /* XXX we should use an enum here. */
 /* 2 for connection refused, 1 for connected, 0 for not yet, -1 for error. */
+// 连接sa对应的服务器
+// 2表示连接被拒绝，1表示连接，0表示尚未连接，-1表示错误
 int
 evutil_socket_connect_(evutil_socket_t *fd_ptr, const struct sockaddr *sa, int socklen)
 {
@@ -560,18 +562,25 @@ err:
    connecting. Return 1 for connected, 0 for not yet, -1 for error.  In the
    error case, set the current socket errno to the error that happened during
    the connect operation. */
+// 检测socket是否连接成功
+// 1成功，0没有，-1出错
 int
 evutil_socket_finished_connecting_(evutil_socket_t fd)
 {
 	int e;
 	ev_socklen_t elen = sizeof(e);
 
+    // 用来检测这个fd是否已经连接上了，这个fd是非阻塞的,
+    // 如果e的值被设为0，那么就说明连接上了,
+    // 否则e被设置为对应的错误值
 	if (getsockopt(fd, SOL_SOCKET, SO_ERROR, (void*)&e, &elen) < 0)
 		return -1;
 
 	if (e) {
+        // 还没连接上
 		if (EVUTIL_ERR_CONNECT_RETRIABLE(e))
 			return 0;
+        // 连接出错
 		EVUTIL_SET_SOCKET_ERROR(e);
 		return -1;
 	}
@@ -2523,6 +2532,7 @@ evutil_load_windows_system_library_(const TCHAR *library_name)
  * to make the socket nonblocking or close-on-exec with as few syscalls as
  * possible.
  */
+// 创建一个sockfd
 evutil_socket_t
 evutil_socket_(int domain, int type, int protocol)
 {
