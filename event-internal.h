@@ -83,10 +83,10 @@ extern "C" {
 // 简单回调，使用evcb_selfcb回调
 #define EV_CLOSURE_CB_SELF 3
 /** A finalizing callback. Uses the evcb_cbfinalize callback. */
-// 结束的回调，使用evcb_cbfinalize回调
+// 结束型回调，使用evcb_cbfinalize回调
 #define EV_CLOSURE_CB_FINALIZE 4
 /** A finalizing event. Uses the evcb_evfinalize callback. */
-// 结束事件回调，使用evcb_evfinalize回调
+// 结束事件，使用evcb_evfinalize回调
 #define EV_CLOSURE_EVENT_FINALIZE 5
 /** A finalizing event that should get freed after. Uses the evcb_evfinalize
  * callback. */

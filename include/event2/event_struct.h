@@ -61,6 +61,7 @@ extern "C" {
 // 目前未使用
 #define EVLIST_SIGNAL	    0x04
 // 事件在激活链表中(如果event监听的事件发生了或者超时了，处于激活状态)
+// event_base的active_queue中
 #define EVLIST_ACTIVE	    0x08
 // 内部使用标记
 #define EVLIST_INTERNAL	    0x10

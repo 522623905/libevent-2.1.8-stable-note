@@ -119,6 +119,7 @@ static void __cdecl evsig_handler(int sig);
 #define EVSIGBASE_LOCK() EVLOCK_LOCK(evsig_base_lock, 0)
 #define EVSIGBASE_UNLOCK() EVLOCK_UNLOCK(evsig_base_lock, 0)
 
+// 信号的一些static变量设置
 void
 evsig_set_base_(struct event_base *base)
 {

@@ -236,8 +236,7 @@ epoll_init(struct event_base *base)
 #endif
 
     // 初始化信号通知的管道
-    // 当设置信号事件时，由于信号捕捉是针对全局来说，所以此处信号捕捉函数是如何通知event_base的呢？
-    // 答案是通过内部管道来实现的，一旦信号捕捉函数捕捉到信号，则将相应信号通过管道传递给event_base，
+    // 当设置信号事件时，一旦信号捕捉函数捕捉到信号，则将相应信号通过管道传递给event_base，
     // 然后event_base根据信号值将相应的回调事件加入激活事件队列，等待event_loop的回调
 	evsig_init_(base);
 
@@ -442,6 +441,7 @@ epoll_dispatch(struct event_base *base, struct timeval *tv)
 	long timeout = -1;
 
 #ifdef USING_TIMERFD
+    // 如果使用高效的定时事件timerfd
 	if (epollop->timerfd >= 0) {
 		struct itimerspec is;
 		is.it_interval.tv_sec = 0;

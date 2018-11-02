@@ -824,14 +824,17 @@ int event_base_set(struct event_base *, struct event *);
 /**@{*/
 /** Block until we have an active event, then exit once all active events
  * have had their callbacks run. */
+// 阻塞直到有活动事件，然后在所有活动事件运行回调后退出
 #define EVLOOP_ONCE	0x01
 /** Do not block: see which events are ready now, run the callbacks
  * of the highest-priority ones, then exit. */
+// 非阻塞，查看现在准备好哪些事件，运行优先级最高的回调，然后退出
 #define EVLOOP_NONBLOCK	0x02
 /** Do not exit the loop because we have no pending events.  Instead, keep
  * running until event_base_loopexit() or event_base_loopbreak() makes us
  * stop.
  */
+// loop一直运行，直到调用相关loop停止函数
 #define EVLOOP_NO_EXIT_ON_EMPTY 0x04
 /**@}*/
 
@@ -949,7 +952,7 @@ int event_base_got_break(struct event_base *);
 /**@{*/
 /** Indicates that a timeout has occurred.  It's not necessary to pass
  * this flag to event_for new()/event_assign() to get a timeout. */
-// 定时事件
+// 事件被激活的原因是超时
 #define EV_TIMEOUT	0x01
 /** Wait for a socket or FD to become readable */
 // 读事件

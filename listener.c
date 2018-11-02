@@ -166,6 +166,7 @@ static const struct evconnlistener_ops evconnlistener_event_ops = {
 
 static void listener_read_cb(evutil_socket_t, short, void *);
 
+// 创建一个监听器
 struct evconnlistener *
 evconnlistener_new(struct event_base *base,
     evconnlistener_cb cb, void *ptr, unsigned flags, int backlog,
@@ -314,6 +315,7 @@ event_listener_destroy(struct evconnlistener *lev)
 	event_debug_unassign(&lev_e->listener);
 }
 
+// 会调用event_add，把event加入到event_base中
 int
 evconnlistener_enable(struct evconnlistener *lev)
 {
