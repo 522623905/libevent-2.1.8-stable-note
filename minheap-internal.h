@@ -61,6 +61,7 @@ static inline void	     min_heap_shift_down_(min_heap_t* s, unsigned hole_index,
 #define min_heap_elem_greater(a, b) \
 	(evutil_timercmp(&(a)->ev_timeout, &(b)->ev_timeout, >))
 
+// 初始化超时时间优先级队列（最小堆）
 void min_heap_ctor_(min_heap_t* s) { s->p = 0; s->n = 0; s->a = 0; }
 void min_heap_dtor_(min_heap_t* s) { if (s->p) mm_free(s->p); }
 void min_heap_elem_init_(struct event* e) { e->ev_timeout_pos.min_heap_idx = -1; }

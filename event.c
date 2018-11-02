@@ -370,8 +370,11 @@ HT_GENERATE(event_debug_map, event_debug_entry, node, hash_debug_entry,
  * clock_gettime or gettimeofday as appropriate to find out the right time.
  * Return 0 on success, -1 on failure.
  */
-// 此函数主要用来获取当前event_base中缓存的时间，并设置使用系统时间更新event_base缓存时间的时间间隔，
-// 并获取当前系统的monotonic时间和当前系统的real时间之间差值并存储在event_base中
+// 此函数主要用来获取当前event_base中缓存的时间存到tp，
+// 如果base中有缓存的时间，则将缓存的时间赋给tp，然后返回即可；
+// 如果base中没有缓存的时间，则使用clock_gettime获取当前系统的monotonic时间；
+// 否则根据上次更新系统时间的时间点、更新间隔、以及当前使用clock_gettime等函数获取当前的系统时间
+// 查看是否需要更新base->tv_clock_diff以及base->last_updated_clock_diff
 static int
 gettime(struct event_base *base, struct timeval *tp)
 {
@@ -383,15 +386,14 @@ gettime(struct event_base *base, struct timeval *tp)
 		return (0);
 	}
 
-        // 使用monotonic_timer获取当前时间，二选一：
-        // CLOCK_MONOTONIC_COARSE 和 CLOCK_MONOTONIC
+        // 使用monotonic_timer获取当前时间，
+        // CLOCK_MONOTONIC_COARSE 或 CLOCK_MONOTONIC
         // 默认情况下是 CLOCK_MONOTONIC模式
 	if (evutil_gettime_monotonic_(&base->monotonic_timer, tp) == -1) {
 		return -1;
 	}
 
-        // 查看是否需要更新缓存的时间
-        // 如果上次更新时间的时间点距离当前时间点的间隔超过CLOCK_SYNC_INTERVAL，则需要更新
+        // 查看是否需要更新缓存的时间?
 	if (base->last_updated_clock_diff + CLOCK_SYNC_INTERVAL
 	    < tp->tv_sec) {
 		struct timeval tv;
@@ -406,6 +408,8 @@ gettime(struct event_base *base, struct timeval *tp)
 	return 0;
 }
 
+// 获取到的时间为开始执行此轮事件回调函数的时间
+// 成功返回 0 失败返回负数
 int
 event_base_gettimeofday_cached(struct event_base *base, struct timeval *tv)
 {
@@ -475,6 +479,7 @@ event_to_event_callback(struct event *ev)
 	return &ev->ev_evcallback;
 }
 
+// 初始化event_base结构体
 struct event_base *
 event_init(void)
 {
@@ -508,6 +513,7 @@ event_base_new(void)
 
 /** Return true iff 'method' is the name of a method that 'cfg' tells us to
  * avoid. */
+// 查看cfg中是否有被屏蔽的后台方法method
 static int
 event_config_is_avoided_method(const struct event_config *cfg,
     const char *method)
@@ -524,6 +530,7 @@ event_config_is_avoided_method(const struct event_config *cfg,
 }
 
 /** Return true iff 'method' is disabled according to the environment. */
+// 检查环境变量是否支持name
 static int
 event_is_method_disabled(const char *name)
 {
@@ -592,8 +599,7 @@ event_base_new_with_config(const struct event_config *cfg)
 	event_debug_mode_too_late = 1;
 #endif
 
-	// 之所以不用mm_malloc是因为mm_malloc并不会清零该内存区域。
-	// 而mm_calloc是会清零申请到的内存区域。这相当于给base初始化
+        //在堆上分配内存存储event_base，所有字段初始化为0
 	if ((base = mm_calloc(1, sizeof(struct event_base))) == NULL) {
 		event_warn("%s: calloc", __func__);
 		return NULL;
@@ -614,13 +620,11 @@ event_base_new_with_config(const struct event_config *cfg)
 		int precise_time =
 		    cfg && (cfg->flags & EVENT_BASE_FLAG_PRECISE_TIMER);
 		int flags;
-        // 如果检查EVENT_*等环境变量并且不使用精确时间，
-        // 则需要检查编译时的环境变量中是否打开了使用精确时间的模式；
-        // 这一段检查的目的是说，虽然配置结构体struct event_config中没有指定
-        // event_base使用精确时间的模式，但是libevent提供编译时使用环境变量来控制
-        // 使用精确时间的模式，所以如果开启检查环境变量的开关，则需要检查是否在编译时
-        // 打开了使用精确时间的模式。例如在CMakeList中就有有关开启选项
-        if (should_check_environment && !precise_time) {
+        //如果没有设置使用更精准的时间标志，但是在环境变量中设置使用更精准的时间那就设置标志
+        // 意思是，虽然配置结构体struct event_config中没有指定,
+        // 但是如果开启检查环境变量的开关，则需要检查是否在编译时打开了使用精确时间的模式。
+        // 例如在CMakeList中就有有关开启选项
+                if (should_check_environment && !precise_time) {
 			precise_time = evutil_getenv_("EVENT_PRECISE_TIMER") != NULL;
 			base->flags |= EVENT_BASE_FLAG_PRECISE_TIMER;
 		}
@@ -628,15 +632,11 @@ event_base_new_with_config(const struct event_config *cfg)
 		flags = precise_time ? EV_MONOT_PRECISE : 0;
 		evutil_configure_monotonic_time_(&base->monotonic_timer, flags);
 
-                // 根据base获取当前的时间
-                // 如果base中有缓存的时间，则将缓存的时间赋给tmp，然后返回即可；
-                // 如果base中没有缓存的时间，则使用clock_gettime获取当前系统的monotonic时间；
-                // 否则根据上次更新系统时间的时间点、更新间隔、以及当前使用clock_gettime等函数获取当前的系统时间
-                // 查看是否需要更新base->tv_clock_diff以及base->last_updated_clock_diff
+                // 获取base当前的时间
 		gettime(base, &tmp);
 	}
 
-    // 创建timer的最小堆
+    // 初始化超时时间优先级队列（最小堆）
 	min_heap_ctor_(&base->timeheap);
 
     // 内部信号通知的管道，0读1写
@@ -659,8 +659,7 @@ event_base_new_with_config(const struct event_config *cfg)
     // 在没有初始化后台方法之前，后台方法必需的数据信息为空
 	base->evbase = NULL;
 
-    // 如果配置信息对象struct event_config存在，则依据配置信息配置，
-    // 否则，赋给默认初始值
+    // 如果配置信息对象struct event_config存在，则依据配置信息配置
 	if (cfg) {
 		memcpy(&base->max_dispatch_time,
 		    &cfg->max_dispatch_interval, sizeof(struct timeval));
@@ -737,11 +736,13 @@ event_base_new_with_config(const struct event_config *cfg)
 #endif
 
 #ifndef EVENT__DISABLE_THREAD_SUPPORT
+        // 使能了线程的支持
 	if (EVTHREAD_LOCKING_ENABLED() &&
 	    (!cfg || !(cfg->flags & EVENT_BASE_FLAG_NOLOCK))) {
 		int r;
 		EVTHREAD_ALLOC_LOCK(base->th_base_lock, 0);
 		EVTHREAD_ALLOC_COND(base->current_event_cond);
+                // 用于初始化通知
 		r = evthread_make_base_notifiable(base);
 		if (r<0) {
 			event_warnx("%s: Unable to make base notifiable.", __func__);
@@ -1178,12 +1179,6 @@ event_config_new(void)
 	cfg->max_dispatch_callbacks = INT_MAX;
     // 设置优先级后的回调函数的限制，初始值为1
 	cfg->limit_callbacks_after_prio = 1;
-
-    // 由于初始分配时赋初值为1，经过上述显式设置之后，还有几个字段的初始值是1
-    // 查看event_config定义发现，还有三个字段使用的初始赋值：
-    // n_cpus_hint ＝ 1
-    // require_features = 1，查看后台方法特征宏定义，发现是边沿触发方式
-    // flags ＝ 1，查看event_base支持的模式，发现是非阻塞模式
 
 	return (cfg);
 }
@@ -1988,6 +1983,7 @@ event_loopexit(const struct timeval *tv)
 		    current_base, tv));
 }
 
+// 经过tv时间后退出loop
 int
 event_base_loopexit(struct event_base *event_base, const struct timeval *tv)
 {
@@ -2276,7 +2272,7 @@ event_base_once(struct event_base *base, evutil_socket_t fd, short events,
 	return (0);
 }
 
-// 注意是"准备" 新的已经分配的事件结构体以添加到event_base中
+// 根据所给条件赋值给事件event
 // 将事件ev绑定在base上，关联文件描述符fd，
 // 关注的事件类型是events，事件发生时的
 // 回调函数是callback，回调函数的参数是arg
@@ -2286,6 +2282,7 @@ event_assign(struct event *ev, struct event_base *base, evutil_socket_t fd, shor
 {
 	if (!base)
 		base = current_base;
+    // 主要用于回调函数的参数就是其本身event的情况
 	if (arg == &event_self_cbarg_ptr_)
 		arg = ev;
 
@@ -2364,6 +2361,10 @@ event_set(struct event *ev, evutil_socket_t fd, short events,
 	EVUTIL_ASSERT(r == 0);
 }
 
+// 获取event本身
+// 很多时候，你可能想创建一个以接收它本身作为回调函数参数的event。
+// 你不能只传一个指向event对象的指针，因为调用event_new()时这个event还不存在。
+// 为了解决这个问题你可以使用event_self_cbarg()。
 void *
 event_self_cbarg(void)
 {

@@ -67,6 +67,7 @@ struct evutil_monotonic_timer {
 #endif
 
 #ifdef HAVE_POSIX_MONOTONIC
+    // CLOCK_MONOTONIC_COARSE 或者 CLOCK_MONOTONIC
 	int monotonic_clock;
 #endif
 
@@ -82,6 +83,7 @@ struct evutil_monotonic_timer {
 	int use_performance_counter;
 #endif
 
+    // 调整的时间
 	struct timeval adjust_monotonic_clock;
 	struct timeval last_time;
 };

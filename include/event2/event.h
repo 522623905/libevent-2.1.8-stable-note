@@ -545,7 +545,7 @@ enum event_base_config_flag {
 	    Setting this option will make it unsafe and nonfunctional to call
 	    functions on the base concurrently from multiple threads.
 	*/
-    // 非阻塞模式，多线程不安全
+    // 多线程调用是不安全的，单线程非阻塞模式
 	EVENT_BASE_FLAG_NOLOCK = 0x01,
 	/** Do not check the EVENT_* environment variables when configuring
 	    an event_base  */
@@ -982,7 +982,8 @@ int event_base_got_break(struct event_base *);
  * THIS IS AN EXPERIMENTAL API. IT MIGHT CHANGE BEFORE THE LIBEVENT 2.1 SERIES
  * BECOMES STABLE.
  **/
-// 终止事件，如果设置这个选项，则event_del不会阻塞，需要使用event_finalize或者
+// 删除事件时就不会阻塞了，不会等到回调函数执行完毕；为了在多线程中安全使用，需要使用
+// event_finalize()或者event_free_finalize()
 #define EV_FINALIZE     0x40
 /**
  * Detects connection close events.  You can use this to detect when a
@@ -992,7 +993,7 @@ int event_base_got_break(struct event_base *);
  * Not all backends support EV_CLOSED.  To detect or require it, use the
  * feature flag EV_FEATURE_EARLY_CLOSE.
  **/
-// 检查事件连接是否关闭；可以使用这个选项来检测链接是否关闭，而不需要读取此链接所有未决数据；
+// 可以自动监测关闭的连接，然后放弃读取未完的数据，但是不是所有后台方法都支持这个选项
 #define EV_CLOSED	0x80
 /**@}*/
 
@@ -1020,6 +1021,8 @@ int event_base_got_break(struct event_base *);
 #define evsignal_add(ev, tv)		event_add((ev), (tv))
 #define evsignal_assign(ev, b, x, cb, arg)			\
 	event_assign((ev), (b), (x), EV_SIGNAL|EV_PERSIST, cb, (arg))
+// 创建一个信号事件处理器，
+// 参数分别是: 所属的base，要处理的信号,回调函数，传给回调函数的参数
 #define evsignal_new(b, x, cb, arg)				\
 	event_new((b), (x), EV_SIGNAL|EV_PERSIST, (cb), (arg))
 #define evsignal_del(ev)		event_del(ev)

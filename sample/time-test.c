@@ -46,8 +46,11 @@ timeout_cb(evutil_socket_t fd, short event, void *arg)
 	struct event *timeout = arg;
 	double elapsed;
 
+    // 获取当前时间
 	evutil_gettimeofday(&newtime, NULL);
+    // 当前时间和上一次时间差值
 	evutil_timersub(&newtime, &lasttime, &difference);
+    // 时间差以秒表示
 	elapsed = difference.tv_sec +
 	    (difference.tv_usec / 1.0e6);
 
@@ -92,14 +95,18 @@ main(int argc, char **argv)
 	base = event_base_new();
 
 	/* Initalize one event */
+    // 赋值定时事件timeout
 	event_assign(&timeout, base, -1, flags, timeout_cb, (void*) &timeout);
 
+    // 设置2s超时，并添加到base中
 	evutil_timerclear(&tv);
 	tv.tv_sec = 2;
 	event_add(&timeout, &tv);
 
+    // 获取初始时间给lasttime
 	evutil_gettimeofday(&lasttime, NULL);
 
+    // 启动循环
 	event_base_dispatch(base);
 
 	return (0);

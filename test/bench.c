@@ -64,6 +64,7 @@
 #include <event.h>
 #include <evutil.h>
 
+// 读到的字节数，失败次数
 static int count, writes, fired, failures;
 static evutil_socket_t *pipes;
 static int num_pipes, num_active, num_writes;
@@ -103,6 +104,7 @@ run_once(void)
 	for (cp = pipes, i = 0; i < num_pipes; i++, cp += 2) {
 		if (event_initialized(&events[i]))
 			event_del(&events[i]);
+        // 赋值管道读event，并添加事件到base
 		event_set(&events[i], cp[0], EV_READ | EV_PERSIST, read_cb, (void *)(ev_intptr_t) i);
 		event_add(&events[i], NULL);
 	}
@@ -112,6 +114,7 @@ run_once(void)
 	fired = 0;
 	space = num_pipes / num_active;
 	space = space * 2;
+    // 往写管道写入数据
 	for (i = 0; i < num_active; i++, fired++)
 		(void) send(pipes[i * space + 1], "e", 1, 0);
 
@@ -175,6 +178,7 @@ main(int argc, char **argv)
 	}
 #endif
 
+    // 给events和pipes分配足够数量的内存
 	events = calloc(num_pipes, sizeof(struct event));
 	pipes = calloc(num_pipes * 2, sizeof(evutil_socket_t));
 	if (events == NULL || pipes == NULL) {
@@ -182,8 +186,10 @@ main(int argc, char **argv)
 		exit(1);
 	}
 
+    // 创建并赋值current_base
 	event_init();
 
+    // 创建num_pipes个socketpair通信管道到pipes数组中
 	for (cp = pipes, i = 0; i < num_pipes; i++, cp += 2) {
 #ifdef USE_PIPES
 		if (pipe(cp) == -1) {

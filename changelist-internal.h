@@ -50,6 +50,8 @@
 #include "event2/util.h"
 
 /** Represents a */
+// 记录在调用后台的 dispatch 函数之前一个更改的event
+// 所有的event_change用event_changelist管理
 struct event_change {
 	/** The fd or signal whose events are to be changed */
 	evutil_socket_t fd;
@@ -66,7 +68,7 @@ struct event_change {
 };
 
 /* Flags for read_change and write_change. */
-
+// 一些表示更改的标志位
 /* If set, add the event. */
 #define EV_CHANGE_ADD     0x01
 /* If set, delete the event.  Exclusive with EV_CHANGE_ADD */

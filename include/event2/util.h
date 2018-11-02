@@ -541,7 +541,7 @@ const char *evutil_socket_error_to_string(int errcode);
 #endif /* !EVENT__HAVE_TIMERADD */
 
 #ifdef EVENT__HAVE_TIMERCLEAR
-// struct timeval清零
+// struct timeval时间清零
 #define evutil_timerclear(tvp) timerclear(tvp)
 #else
 #define	evutil_timerclear(tvp)	(tvp)->tv_sec = (tvp)->tv_usec = 0
@@ -578,6 +578,7 @@ EVENT2_EXPORT_SYMBOL
 ev_int64_t evutil_strtoll(const char *s, char **endptr, int base);
 
 /** Replacement for gettimeofday on platforms that lack it. */
+// 获取当前的时间戳
 #ifdef EVENT__HAVE_GETTIMEOFDAY
 #define evutil_gettimeofday(tv, tz) gettimeofday((tv), (tz))
 #else

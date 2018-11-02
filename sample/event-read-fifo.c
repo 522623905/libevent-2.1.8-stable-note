@@ -107,6 +107,7 @@ main(int argc, char **argv)
 	int socket;
 
 	if (lstat(fifo, &st) == 0) {
+        // 判断是否是一般文件
 		if ((st.st_mode & S_IFMT) == S_IFREG) {
 			errno = EEXIST;
 			perror("lstat");
@@ -114,6 +115,7 @@ main(int argc, char **argv)
 		}
 	}
 
+    // 删除该文件后创建一个命名管道类型的文件
 	unlink(fifo);
 	if (mkfifo(fifo, 0600) == -1) {
 		perror("mkfifo");

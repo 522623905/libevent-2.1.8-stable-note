@@ -68,7 +68,7 @@ extern "C" {
 #define EVLIST_ACTIVE_LATER 0x20
 // 事件已经终止
 #define EVLIST_FINALIZING   0x40
-// 事件初始化完成(用event_new创建的even都是处于已初始化状态的)
+// 事件已被初始化(用event_new创建的event都是处于已初始化状态的)
 #define EVLIST_INIT	    0x80
 // 包含所有事件状态，用于判断合法性的
 #define EVLIST_ALL          0xff
@@ -76,6 +76,7 @@ extern "C" {
 /* Fix so that people don't have to run with <sys/queue.h> */
 #ifndef TAILQ_ENTRY
 #define EVENT_DEFINED_TQENTRY_
+// 可以指向任意类型的的一个双向链表节点
 #define TAILQ_ENTRY(type)						\
 struct {								\
 	struct type *tqe_next;	/* next element */			\
@@ -159,13 +160,13 @@ struct event {
 	union {
         // 公用超时队列
 		TAILQ_ENTRY(event) ev_next_with_common_timeout;
-        // min_heap最小堆索引
+        // 其在管理超时事件的小根堆中的索引
 		int min_heap_idx;
 	} ev_timeout_pos;
     // 如果是I/O事件，ev_fd为文件描述符；如果是信号，ev_fd为信号
 	evutil_socket_t ev_fd;
 
-    // libevent句柄，每个事件都会保存一份句柄
+    // 该事件所属的反应堆实例,一个libevent实例
 	struct event_base *ev_base;
 
     // 用共用体来同时表现IO事件和信号

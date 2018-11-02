@@ -182,20 +182,26 @@ evutil_date_rfc1123(char *date, const size_t datelen, const struct tm *tm)
    implements a trivial ratcheting mechanism so that the values never go
    backwards.
  */
+// 如果用户向前调整了实时，那么调整实时时间tv
 static void
 adjust_monotonic_time(struct evutil_monotonic_timer *base,
     struct timeval *tv)
 {
 	evutil_timeradd(tv, &base->adjust_monotonic_clock, tv);
 
+    // 当前时间是否比上次的时间小，如果小，说明用户先前调整了时间
 	if (evutil_timercmp(tv, &base->last_time, <)) {
 		/* Guess it wasn't monotonic after all. */
 		struct timeval adjust;
+        // 计算用户向前调整了多长时间
 		evutil_timersub(&base->last_time, tv, &adjust);
+        // 这次向前调整的时间加上以前向前调整的时间等于新的调整的时间
 		evutil_timeradd(&adjust, &base->adjust_monotonic_clock,
 		    &base->adjust_monotonic_clock);
+        // 由于用户向前调整了时间，所以现在的真实时间，无法确定，所以只能将就用上次的时间
 		*tv = base->last_time;
 	}
+    // 记录当前时间
 	base->last_time = *tv;
 }
 
@@ -320,19 +326,24 @@ evutil_configure_monotonic_time_(struct evutil_monotonic_timer *base,
 	return 0;
 }
 
+// 获取实际的monotonic时间(从系统启动至今的时间)给tp
 int
 evutil_gettime_monotonic_(struct evutil_monotonic_timer *base,
     struct timeval *tp)
 {
 	struct timespec ts;
 
+    // 如果不支持monotonic time
 	if (base->monotonic_clock < 0) {
+        // 获取实时时间戳
 		if (evutil_gettimeofday(tp, NULL) < 0)
 			return -1;
+        // 如果用户向前调整了实时，那么调整实时时间
 		adjust_monotonic_time(base, tp);
 		return 0;
 	}
 
+    // 获取monotic time
 	if (clock_gettime(base->monotonic_clock, &ts) == -1)
 		return -1;
 	tp->tv_sec = ts.tv_sec;

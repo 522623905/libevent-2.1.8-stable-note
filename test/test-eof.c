@@ -69,11 +69,11 @@ read_cb(evutil_socket_t fd, short event, void *arg)
 	printf("%s: read %d%s\n", __func__,
 	    len, len ? "" : " - means EOF");
 
-	if (len) {
-		if (!called)
-			event_add(arg, &timeout);
-	} else if (called == 1)
-		test_okay = 0;
+    if (len) {
+        if (!called)
+            event_add(arg, &timeout);
+    } else if (called == 1)
+        test_okay = 0;
 
 	called++;
 }
@@ -106,9 +106,9 @@ main(int argc, char **argv)
 	event_init();
 
 	/* Initalize one event */
-	event_set(&ev, pair[1], EV_READ | EV_TIMEOUT, read_cb, &ev);
+    event_set(&ev, pair[1], EV_READ | EV_TIMEOUT, read_cb, &ev);
 
-	event_add(&ev, &timeout);
+    event_add(&ev, &timeout);
 
 	event_dispatch();
 

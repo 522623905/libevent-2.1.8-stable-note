@@ -85,17 +85,20 @@
  */
 
 /*
- * Singly-linked List definitions.
+ * Singly-linked List definitions. 单向链表
  */
+// 一个单向链表的头部
 #define SLIST_HEAD(name, type)						\
 struct name {								\
 	struct type *slh_first;	/* first element */			\
 }
 
+// 头部初始化为NULL
 #define	SLIST_HEAD_INITIALIZER(head)					\
 	{ NULL }
 
 #ifndef _WIN32
+// 指向下一个单向链表对象
 #define SLIST_ENTRY(type)						\
 struct {								\
 	struct type *sle_next;	/* next element */			\
@@ -105,11 +108,18 @@ struct {								\
 /*
  * Singly-linked List access methods.
  */
+// 单链表的访问方法
+
+// 返回链表的第一个对象
 #define	SLIST_FIRST(head)	((head)->slh_first)
+// 返回链表的尾部,指向NULL
 #define	SLIST_END(head)		NULL
+// 判断链表是否为空
 #define	SLIST_EMPTY(head)	(SLIST_FIRST(head) == SLIST_END(head))
+// 用于获取下一个对象
 #define	SLIST_NEXT(elm, field)	((elm)->field.sle_next)
 
+// 用于遍历链表
 #define	SLIST_FOREACH(var, head, field)					\
 	for((var) = SLIST_FIRST(head);					\
 	    (var) != SLIST_END(head);					\
@@ -118,27 +128,34 @@ struct {								\
 /*
  * Singly-linked List functions.
  */
+// 单向链表的一些操作接口
+
+// 初始化链表
 #define	SLIST_INIT(head) {						\
 	SLIST_FIRST(head) = SLIST_END(head);				\
 }
 
+// 把elm元素插入到slistelm元素后面
 #define	SLIST_INSERT_AFTER(slistelm, elm, field) do {			\
 	(elm)->field.sle_next = (slistelm)->field.sle_next;		\
 	(slistelm)->field.sle_next = (elm);				\
 } while (0)
 
+// 把elm元素插入slistelm链表头部
 #define	SLIST_INSERT_HEAD(head, elm, field) do {			\
 	(elm)->field.sle_next = (head)->slh_first;			\
 	(head)->slh_first = (elm);					\
 } while (0)
 
+// 把移动表头移动到下一元素
 #define	SLIST_REMOVE_HEAD(head, field) do {				\
 	(head)->slh_first = (head)->slh_first->field.sle_next;		\
 } while (0)
 
 /*
- * List definitions.
+ * List definitions. 双向链表
  */
+// 一个双向链表的头部
 #define LIST_HEAD(name, type)						\
 struct name {								\
 	struct type *lh_first;	/* first element */			\
@@ -147,6 +164,9 @@ struct name {								\
 #define LIST_HEAD_INITIALIZER(head)					\
 	{ NULL }
 
+// 指向下一个对象和前一个元素le_next的地址（解引用（*le_prev）之后就是本元素的地址）
+// le_prev表示指向上一个元素的next的指针,*le_prev其实就是上一个元素的next了
+// 通过对*le_prev的修改其实就是修改上一个元素的next
 #define LIST_ENTRY(type)						\
 struct {								\
 	struct type *le_next;	/* next element */			\
@@ -156,9 +176,15 @@ struct {								\
 /*
  * List access methods
  */
+// 双向链表的访问方法
+
+// 返回链表的第一个对象
 #define	LIST_FIRST(head)		((head)->lh_first)
+// 返回链表的尾部,指向NULL
 #define	LIST_END(head)			NULL
+// 判断链表是否为空
 #define	LIST_EMPTY(head)		(LIST_FIRST(head) == LIST_END(head))
+// 用于获取下一个对象
 #define	LIST_NEXT(elm, field)		((elm)->field.le_next)
 
 #define LIST_FOREACH(var, head, field)					\
@@ -169,10 +195,14 @@ struct {								\
 /*
  * List functions.
  */
+// 双向链表的一些操作接口
+
+// 初始化链表
 #define	LIST_INIT(head) do {						\
 	LIST_FIRST(head) = LIST_END(head);				\
 } while (0)
 
+// 把elm元素插入到listelm元素后面
 #define LIST_INSERT_AFTER(listelm, elm, field) do {			\
 	if (((elm)->field.le_next = (listelm)->field.le_next) != NULL)	\
 		(listelm)->field.le_next->field.le_prev =		\
@@ -181,6 +211,7 @@ struct {								\
 	(elm)->field.le_prev = &(listelm)->field.le_next;		\
 } while (0)
 
+// 把elm元素插入到listelm元素前面
 #define	LIST_INSERT_BEFORE(listelm, elm, field) do {			\
 	(elm)->field.le_prev = (listelm)->field.le_prev;		\
 	(elm)->field.le_next = (listelm);				\
@@ -188,6 +219,7 @@ struct {								\
 	(listelm)->field.le_prev = &(elm)->field.le_next;		\
 } while (0)
 
+// 把elm元素插入到链表头部
 #define LIST_INSERT_HEAD(head, elm, field) do {				\
 	if (((elm)->field.le_next = (head)->lh_first) != NULL)		\
 		(head)->lh_first->field.le_prev = &(elm)->field.le_next;\
@@ -195,6 +227,7 @@ struct {								\
 	(elm)->field.le_prev = &(head)->lh_first;			\
 } while (0)
 
+// 移除ele元素
 #define LIST_REMOVE(elm, field) do {					\
 	if ((elm)->field.le_next != NULL)				\
 		(elm)->field.le_next->field.le_prev =			\
@@ -202,6 +235,7 @@ struct {								\
 	*(elm)->field.le_prev = (elm)->field.le_next;			\
 } while (0)
 
+// 用elm2替换链表中的elm对象
 #define LIST_REPLACE(elm, elm2, field) do {				\
 	if (((elm2)->field.le_next = (elm)->field.le_next) != NULL)	\
 		(elm2)->field.le_next->field.le_prev =			\
@@ -211,17 +245,21 @@ struct {								\
 } while (0)
 
 /*
- * Simple queue definitions.
+ * Simple queue definitions. 队列
  */
+// 队列表头：指向队列的第一个成员 和 指向队列最后一个成员的next地址
+// *sqh_last则表示最后一个成员的next
 #define SIMPLEQ_HEAD(name, type)					\
 struct name {								\
 	struct type *sqh_first;	/* first element */			\
 	struct type **sqh_last;	/* addr of last next element */		\
 }
 
+// 初始化表头
 #define SIMPLEQ_HEAD_INITIALIZER(head)					\
 	{ NULL, &(head).sqh_first }
 
+// 定义指向下一个队列成员的结构
 #define SIMPLEQ_ENTRY(type)						\
 struct {								\
 	struct type *sqe_next;	/* next element */			\
@@ -230,9 +268,15 @@ struct {								\
 /*
  * Simple queue access methods.
  */
+// 队列的访问方法
+
+// 返回队列的第一个对象
 #define	SIMPLEQ_FIRST(head)	    ((head)->sqh_first)
+// 返回队列的尾部,指向NULL
 #define	SIMPLEQ_END(head)	    NULL
+// 判断队列是否为空
 #define	SIMPLEQ_EMPTY(head)	    (SIMPLEQ_FIRST(head) == SIMPLEQ_END(head))
+// 用于获取下一个对象
 #define	SIMPLEQ_NEXT(elm, field)    ((elm)->field.sqe_next)
 
 #define SIMPLEQ_FOREACH(var, head, field)				\
@@ -243,37 +287,47 @@ struct {								\
 /*
  * Simple queue functions.
  */
+// 队列的一些操作接口
+
+// 初始化队列表头
 #define	SIMPLEQ_INIT(head) do {						\
 	(head)->sqh_first = NULL;					\
 	(head)->sqh_last = &(head)->sqh_first;				\
 } while (0)
 
+// 在表头插入一个成员elm
 #define SIMPLEQ_INSERT_HEAD(head, elm, field) do {			\
 	if (((elm)->field.sqe_next = (head)->sqh_first) == NULL)	\
 		(head)->sqh_last = &(elm)->field.sqe_next;		\
 	(head)->sqh_first = (elm);					\
 } while (0)
 
+// 在队列尾插入一个成员elm
 #define SIMPLEQ_INSERT_TAIL(head, elm, field) do {			\
 	(elm)->field.sqe_next = NULL;					\
 	*(head)->sqh_last = (elm);					\
 	(head)->sqh_last = &(elm)->field.sqe_next;			\
 } while (0)
 
+// 在head队列成员listelm之后插入一个新的成员elm
 #define SIMPLEQ_INSERT_AFTER(head, listelm, elm, field) do {		\
 	if (((elm)->field.sqe_next = (listelm)->field.sqe_next) == NULL)\
 		(head)->sqh_last = &(elm)->field.sqe_next;		\
 	(listelm)->field.sqe_next = (elm);				\
 } while (0)
 
+// 从队列头head移除队列的首个成员elm
 #define SIMPLEQ_REMOVE_HEAD(head, elm, field) do {			\
 	if (((head)->sqh_first = (elm)->field.sqe_next) == NULL)	\
 		(head)->sqh_last = &(head)->sqh_first;			\
 } while (0)
 
 /*
- * Tail queue definitions.
+ * Tail queue definitions. 尾队列
  */
+
+// 定义一个队列的头
+// 指向队列第一个成员 和 指向队列最后一个成员的&tqe_next
 #define TAILQ_HEAD(name, type)						\
 struct name {								\
 	struct type *tqh_first;	/* first element */			\
@@ -283,9 +337,7 @@ struct name {								\
 #define TAILQ_HEAD_INITIALIZER(head)					\
 	{ NULL, &(head).tqh_first }
 
-// 和前面的TAILQ_HEAD不同，这里并没有结构体名,
-// 所以该结构体只能作为一个匿名结构体。所以，它一般都是另外一个结构体
-// 或者共用体的成员
+// 指向下一个成员的指针 和 指向上一个成员的&tqe_next指针
 #define TAILQ_ENTRY(type)						\
 struct {								\
 	struct type *tqe_next;	/* next element */			\
@@ -296,14 +348,21 @@ struct {								\
  * tail queue access methods
  */
 // TAILQ_QUEUE定义了一系列的访问和操作方法
+
+// 返回队列的第一个对象
 #define	TAILQ_FIRST(head)		((head)->tqh_first)
+// 返回队列的尾部,指向NULL
 #define	TAILQ_END(head)			NULL
+// 用于获取下一个对象
 #define	TAILQ_NEXT(elm, field)		((elm)->field.tqe_next)
+// 获取最后一个对象
 #define TAILQ_LAST(head, headname)					\
 	(*(((struct headname *)((head)->tqh_last))->tqh_last))
 /* XXX */
+// 获取ele的前一个节点
 #define TAILQ_PREV(elm, headname, field)				\
 	(*(((struct headname *)((elm)->field.tqe_prev))->tqh_last))
+// 判断队列是否为空
 #define	TAILQ_EMPTY(head)						\
 	(TAILQ_FIRST(head) == TAILQ_END(head))
 
@@ -320,11 +379,13 @@ struct {								\
 /*
  * Tail queue functions.
  */
+// 队列初始化
 #define	TAILQ_INIT(head) do {						\
 	(head)->tqh_first = NULL;					\
 	(head)->tqh_last = &(head)->tqh_first;				\
 } while (0)
 
+// 在队头head处插入元素elm
 #define TAILQ_INSERT_HEAD(head, elm, field) do {			\
 	if (((elm)->field.tqe_next = (head)->tqh_first) != NULL)	\
 		(head)->tqh_first->field.tqe_prev =			\
@@ -335,6 +396,7 @@ struct {								\
 	(elm)->field.tqe_prev = &(head)->tqh_first;			\
 } while (0)
 
+// 在队列head尾部插入ele
 #define TAILQ_INSERT_TAIL(head, elm, field) do {			\
 	(elm)->field.tqe_next = NULL;					\
 	(elm)->field.tqe_prev = (head)->tqh_last;			\
@@ -342,6 +404,7 @@ struct {								\
 	(head)->tqh_last = &(elm)->field.tqe_next;			\
 } while (0)
 
+// 在队列head的listele元素后插入ele
 #define TAILQ_INSERT_AFTER(head, listelm, elm, field) do {		\
 	if (((elm)->field.tqe_next = (listelm)->field.tqe_next) != NULL)\
 		(elm)->field.tqe_next->field.tqe_prev =			\
@@ -352,6 +415,7 @@ struct {								\
 	(elm)->field.tqe_prev = &(listelm)->field.tqe_next;		\
 } while (0)
 
+// 在listele元素前插入ele
 #define	TAILQ_INSERT_BEFORE(listelm, elm, field) do {			\
 	(elm)->field.tqe_prev = (listelm)->field.tqe_prev;		\
 	(elm)->field.tqe_next = (listelm);				\
@@ -359,6 +423,7 @@ struct {								\
 	(listelm)->field.tqe_prev = &(elm)->field.tqe_next;		\
 } while (0)
 
+// 移除队列head的ele元素
 #define TAILQ_REMOVE(head, elm, field) do {				\
 	if (((elm)->field.tqe_next) != NULL)				\
 		(elm)->field.tqe_next->field.tqe_prev =			\
@@ -368,6 +433,7 @@ struct {								\
 	*(elm)->field.tqe_prev = (elm)->field.tqe_next;			\
 } while (0)
 
+// 使用ele2替换队列head的ele元素
 #define TAILQ_REPLACE(head, elm, elm2, field) do {			\
 	if (((elm2)->field.tqe_next = (elm)->field.tqe_next) != NULL)	\
 		(elm2)->field.tqe_next->field.tqe_prev =		\
@@ -379,8 +445,10 @@ struct {								\
 } while (0)
 
 /*
- * Circular queue definitions.
+ * Circular queue definitions. 循环队列
  */
+
+// 定义一个循环队列的队列头, 指向队列头 和 队列尾部
 #define CIRCLEQ_HEAD(name, type)					\
 struct name {								\
 	struct type *cqh_first;		/* first element */		\
@@ -390,6 +458,7 @@ struct name {								\
 #define CIRCLEQ_HEAD_INITIALIZER(head)					\
 	{ CIRCLEQ_END(&head), CIRCLEQ_END(&head) }
 
+// 定义一个 指向下一个队列成员 和 上一个队列成员
 #define CIRCLEQ_ENTRY(type)						\
 struct {								\
 	struct type *cqe_next;		/* next element */		\

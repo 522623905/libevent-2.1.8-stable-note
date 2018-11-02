@@ -395,7 +395,7 @@ bufferevent_socket_new(struct event_base *base, evutil_socket_t fd,
 	if ((bufev_p = mm_calloc(1, sizeof(struct bufferevent_private)))== NULL)
 		return NULL;
 
-    // 完成公有部分的初始化,会新建一个输入和输出缓存区
+    // 完成公有部分的初始化,会新建一个输入和输出缓冲区
 	if (bufferevent_init_common_(bufev_p, base, &bufferevent_ops_socket,
 				    options) < 0) {
 		mm_free(bufev_p);

@@ -72,6 +72,7 @@ struct evconnlistener_ops {
 	struct event_base *(*getbase)(struct evconnlistener *);
 };
 
+// 监听器
 struct evconnlistener {
     // 操作函数
 	const struct evconnlistener_ops *ops;
@@ -224,6 +225,13 @@ evconnlistener_new(struct event_base *base,
 
 // 申请一个socket，然后对之进行一些有关非阻塞、重用、保持连接的处理、绑定到特定的IP和端口。
 // 最后把业务逻辑交给evconnlistener_new处理
+// base: 所属的event_base对象,
+// evconnlistener_cb: 监听回调函数,
+// ptr: 回调函数的参数,
+// flags: 标志(如 LEV_OPT_REUSEABLE|LEV_OPT_CLOSE_ON_FREE)
+// backlog: 监听的个数,
+// sa: 地址,
+// socklen: 地址长度
 struct evconnlistener *
 evconnlistener_new_bind(struct event_base *base, evconnlistener_cb cb,
     void *ptr, unsigned flags, int backlog, const struct sockaddr *sa,

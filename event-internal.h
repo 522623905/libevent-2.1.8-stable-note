@@ -45,9 +45,10 @@ extern "C" {
 /* map union members back */
 
 /* mutually exclusive */
+// 获取event中的ev_存储的下一个signal或io事件地址
 #define ev_signal_next	ev_.ev_signal.ev_signal_next
 #define ev_io_next	ev_.ev_io.ev_io_next
-// 用户设置的超时时间(相对时间)
+// 获取event中的ev_存储的用户设置的超时时间(相对时间?)
 #define ev_io_timeout	ev_.ev_io.ev_timeout
 
 /* used only by signals */
@@ -55,6 +56,7 @@ extern "C" {
 #define ev_ncalls	ev_.ev_signal.ev_ncalls
 #define ev_pncalls	ev_.ev_signal.ev_pncalls
 
+// 获取event中的ev_evcallback的相关回调结构体属性
 #define ev_pri ev_evcallback.evcb_pri
 #define ev_flags ev_evcallback.evcb_flags
 #define ev_closure ev_evcallback.evcb_closure
@@ -93,6 +95,7 @@ extern "C" {
 /** @} */
 
 /** Structure to define the backend of a given event_base. */
+// 表示IO多路复用的相关信息，名字以及支持的方法
 struct eventop {
 	/** The name of this backend. */
     // 后台方法名字，即epoll，select，poll等
@@ -176,12 +179,12 @@ HT_HEAD(event_io_map, event_map_entry);
    defined, this structure is also used as event_io_map, which maps fds to a
    list of events.
 */
-// 用来存储信号数字和一系列事件之间的映射。如果EVMAP_USE_HT没有定义，即不是在win32下，
+// 用来存储信号数字和一系列事件之间的映射。
 // struct event_io_map和struct event_signal_map一致，event_io_map是将fds和事件映射到一块
 struct event_signal_map {
 	/* An array of evmap_io * or of evmap_signal *; empty entries are
 	 * set to NULL. */
-    // 二级指针，evmap_signal*数组
+    // 二级指针，元素是evmap_signal*数组，而evmap_signal是一个event的队列
     void **entries;
 	/* The number of entries available in entries */
     // 元素个数
@@ -235,7 +238,9 @@ extern int event_debug_mode_on_;
 TAILQ_HEAD(evcallback_list, event_callback);
 
 /* Sets up an event for processing once */
+// 设置一次处理事件
 struct event_once {
+    // 一次处理事件的链表
 	LIST_ENTRY(event_once) next_once;
 	struct event ev;
 
@@ -243,15 +248,17 @@ struct event_once {
 	void *arg;
 };
 
+// libevent中基于Reactor模式的事件处理框架对应event_base，在event在完成创建后，
+// 需要向event_base注册事件，监控事件的当前状态，当事件状态为激活状(EV_ACTIVE)时，调用回调函数执行
 struct event_base {
 	/** Function pointers and other data to describe this event_base's
 	 * backend. */
-    // 实际使用后台方法的句柄，实际上指向的是静态全局数组变量
-    // ，从静态全局变量eventops中选择
+    // I/O多路复用机制的封装,静态全局数组变量eventops[]数组中一项，
+    // 决定了该event_base使用哪种I/O多路复用技术
 	const struct eventop *evsel;
 	/** Pointer to backend-specific data. */
     // 指向后台特定的数据，是由evsel->init返回的句柄
-    // 实际上是对实际后台方法所需数据的封装，void出于兼容性考虑
+    // I/O多路复用机制的一个实例，void出于兼容性考虑
 	void *evbase;
 
 	/** List of changes to tell backend about at next dispatch.  Only used
@@ -264,7 +271,7 @@ struct event_base {
     // 用于描述当前event_base用于信号的后台方法
 	const struct eventop *evsigsel;
 	/** Data to implement the common signal handelr code. */
-    // 用于实现公用信号句柄的代码
+    // 存储信号处理的信息
 	struct evsig_info sig;
 
 	/** Number of virtual events */
@@ -291,10 +298,10 @@ struct event_base {
     // 一旦我们完成处理事件了，如果我们应该终止loop，可以设置这个
 	int event_gotterm;
 	/** Set if we should terminate the loop immediately */
-    // 如果需要中止loop，可以设置这个变量
+    // 如果需要中止loop立即退出，可以设置这个变量
 	int event_break;
 	/** Set if we should start a new instance of the loop immediately. */
-    // 如果启动新实例的loop，可以设置这个
+    // 如果立即启动一个新的事件循环，可以设置这个
 	int event_continue;
 
 	/** The currently running priority of events */
@@ -303,7 +310,7 @@ struct event_base {
 
 	/** Set if we're running the event_base_loop function, to prevent
 	 * reentrant invocation. */
-    // 防止event_base_loop重入的
+    // 是否正在进行事件循环,防止event_base_loop重入的
 	int running_loop;
 
 	/** Set to the number of deferred_cbs we've made 'active' in the
@@ -321,11 +328,11 @@ struct event_base {
 	 * that have triggered, and whose callbacks need to be called).  Low
 	 * priority numbers are more important, and stall higher ones.
 	 */
-    // 存储激活事件的event_callbacks的队列，这些event_callbacks都需要调用；
-    // 是一个数组，每个元素是一个激活队列，有nactivequeues个激活队列,不同的队列有不同的优先级,数字越小优先级越高
+    // 存储激活事件的event_callbacks的链表，这些event_callbacks都需要调用；
+    // 是一个指针数组，activequeues[priority]指向优先级为priority的链表
 	struct evcallback_list *activequeues;
 	/** The length of the activequeues array */
-    // 活跃队列的长度,即activequeues数组元素个数(每个元素是队列)
+    // 活跃事件的个数,即activequeues数组元素个数(每个元素是队列)
 	int nactivequeues;
 	/** A list of event_callbacks that should become active the next time
 	 * we process events, but not this time. */
@@ -356,7 +363,7 @@ struct event_base {
 	struct event_signal_map sigmap;
 
 	/** Priority queue of events with timeouts. */
-    // 事件超时的优先级队列，使用最小堆实现
+    // 管理定时事件的最小堆
 	struct min_heap timeheap;
 
 	/** Stored timeval: used to avoid calling gettimeofday/clock_gettime
@@ -369,14 +376,15 @@ struct event_base {
 
 	/** Difference between internal time (maybe from clock_gettime) and
 	 * gettimeofday. */
-    // 内部时间（可以从clock_gettime获取）和gettimeofday之间的差值
+    // 内部缓存的时间tv_cache和直接调用gettimeofday时间的差值
 	struct timeval tv_clock_diff;
 	/** Second in which we last updated tv_clock_diff, in monotonic time. */
-    // 上一次更新内部时间的间隔秒数
+    // 上一次更新tv_clock_diff时对应的当时的时间
 	time_t last_updated_clock_diff;
 
 #ifndef EVENT__DISABLE_THREAD_SUPPORT
 	/* threading support */
+    // 线程id,锁，条件变量，阻塞的线程个数
 	/** The thread currently running the event_loop for this base */
 	unsigned long th_owner_id;
 	/** A lock to prevent conflicting accesses to this event_base */
@@ -398,12 +406,6 @@ struct event_base {
 
 	/** Flags that this base was configured with */
     // event_base配置的特征值
-    // 多线程调用是不安全的，单线程非阻塞模式: EVENT_BASE_FLAG_NOLOCK = 0x01,
-    // 忽略检查EVENT_*等环境变量: EVENT_BASE_FLAG_IGNORE_ENV = 0x02,
-    // 只用于windows: EVENT_BASE_FLAG_STARTUP_IOCP = 0x04,
-    // 不使用缓存的时间，每次回调都会获取系统时间: EVENT_BASE_FLAG_NO_CACHE_TIME = 0x08,
-    // 如果使用epoll方法，则使用epoll内部的changelist: EVENT_BASE_FLAG_EPOLL_USE_CHANGELIST = 0x10,
-    // 使用更精确的时间，但是可能性能会降低: EVENT_BASE_FLAG_PRECISE_TIMER = 0x20
 	enum event_base_config_flag flags;
 
     // 最大调度时间间隔
@@ -422,7 +424,7 @@ struct event_base {
 	int is_notify_pending;
 	/** A socketpair used by some th_notify functions to wake up the main
 	 * thread. */
-    // 某些th_notify函数用于唤醒主线程的socket pair，0读1写
+    // 某些th_notify函数用于唤醒主线程的socketpair，0读1写
 	evutil_socket_t th_notify_fd[2];
 	/** An event used by some th_notify functions to wake up the main
 	 * thread. */
@@ -439,10 +441,12 @@ struct event_base {
 	struct evutil_weakrand_state weakrand_seed;
 
 	/** List of event_onces that have not yet fired. */
+    // 尚未触发的event_once列表
 	LIST_HEAD(once_event_list, event_once) once_events;
 
 };
 
+// 表示要屏蔽的后台方法
 struct event_config_entry {
     // 下一个避免使用的后台方法名
 	TAILQ_ENTRY(event_config_entry) next;

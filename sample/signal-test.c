@@ -35,6 +35,7 @@ signal_cb(evutil_socket_t fd, short event, void *arg)
 
 	printf("signal_cb: got signal %d\n", event_get_signal(signal));
 
+    // 当收到该信号第三次时，从base中删除信号事件
 	if (called >= 2)
 		event_del(signal);
 
@@ -56,11 +57,14 @@ main(int argc, char **argv)
 #endif
 
 	/* Initalize the event library */
+    // 新建一个Reactor
 	base = event_base_new();
 
 	/* Initalize one event */
+    // 把event自己作为回调signal_cb的参数
 	signal_int = evsignal_new(base, SIGINT, signal_cb, event_self_cbarg());
 
+    // 注册信号事件
 	event_add(signal_int, NULL);
 
 	event_base_dispatch(base);
