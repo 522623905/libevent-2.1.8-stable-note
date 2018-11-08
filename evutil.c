@@ -1869,6 +1869,8 @@ evutil_vsnprintf(char *buf, size_t buflen, const char *format, va_list ap)
 #define USE_INTERNAL_PTON
 
 // 将src表示的结构体转换为点分十进制ip形式
+// af: AF_INET / AF_INET6 ;src: in_addr / in6_addr
+// dst: 指向大小为 len 的字符缓冲区
 const char *
 evutil_inet_ntop(int af, const void *src, char *dst, size_t len)
 {
@@ -1966,6 +1968,8 @@ evutil_inet_ntop(int af, const void *src, char *dst, size_t len)
 }
 
 // 将点分十进制ip形式转换成struct in_addr
+// af: AF_INET / AF_INET6 ; src: 指向要解析的点分十进制ip字符串
+// dst: 指向一个 in_addr 或者 in_addr6结构体
 int
 evutil_inet_pton(int af, const char *src, void *dst)
 {
@@ -2079,6 +2083,12 @@ evutil_inet_pton(int af, const char *src, void *dst)
 }
 
 // 将字符串所表示的ip和端口进行解析，并存放到参数out所指向的结构体上
+// 支持的格式如下:
+// [ipv6]:port
+// ipv6
+// [ipv6]
+// ipv4:port
+// ipv4
 int
 evutil_parse_sockaddr_port(const char *ip_as_string, struct sockaddr *out, int *outlen)
 {

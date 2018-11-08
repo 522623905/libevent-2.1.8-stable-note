@@ -510,12 +510,12 @@ enum event_method_feature {
      * many is [approximately] an O(1) operation. This excludes (for
      * example) select and poll, which are approximately O(N) for N
      * equal to the total number of possible events. */
-    // 要求具有很多事件的后台方法可以以近似O（1）处理事件；select和poll
-    // 无法提供这种特征，它们只能提供近似O（N）的操作
+    // 要求添加、删除单个事件,或者确定哪个事件激活的操作是 O (1)的后端；
+    // select和poll无法提供这种特征，它们只能提供近似O（N）的操作
     EV_FEATURE_O1 = 0x02,
     /** Require an event method that allows file descriptors as well as
      * sockets. */
-    // 后台方法可以处理包括sockets在内的各种文件描述符
+    // 要求支持任意文件描述符,而不仅仅是套接字的后端
     EV_FEATURE_FDS = 0x04,
     /** Require an event method that allows you to use EV_CLOSED to detect
      * connection close without the necessity of reading all the pending data.
@@ -545,7 +545,7 @@ enum event_base_config_flag {
 	    Setting this option will make it unsafe and nonfunctional to call
 	    functions on the base concurrently from multiple threads.
 	*/
-    // 多线程调用是不安全的，单线程非阻塞模式
+    // 不要为 event_base 分配锁,多线程调用是不安全的
 	EVENT_BASE_FLAG_NOLOCK = 0x01,
 	/** Do not check the EVENT_* environment variables when configuring
 	    an event_base  */
@@ -952,16 +952,16 @@ int event_base_got_break(struct event_base *);
 /**@{*/
 /** Indicates that a timeout has occurred.  It's not necessary to pass
  * this flag to event_for new()/event_assign() to get a timeout. */
-// 事件被激活的原因是超时
+// 表示某超时时间流逝后事件成为激活的
 #define EV_TIMEOUT	0x01
 /** Wait for a socket or FD to become readable */
-// 读事件
+// 表示指定的文件描述符已经就绪,可以读取的时候,事件将成为激活的
 #define EV_READ		0x02
 /** Wait for a socket or FD to become writeable */
-// 写事件
+// 表示指定的文件描述符已经就绪,可以写入的时候,事件将成为激活的
 #define EV_WRITE	0x04
 /** Wait for a POSIX signal to be raised*/
-// 信号
+// 用于实现信号检测
 #define EV_SIGNAL	0x08
 /**
  * Persistent event: won't get removed automatically when activated.
@@ -1007,7 +1007,7 @@ int event_base_got_break(struct event_base *);
 /**@{*/
 #define evtimer_assign(ev, b, cb, arg) \
 	event_assign((ev), (b), -1, 0, (cb), (arg))
-// 创建一个超时event
+// 一些操作超时事件的宏
 #define evtimer_new(b, cb, arg)	       event_new((b), -1, 0, (cb), (arg))
 #define evtimer_add(ev, tv)		event_add((ev), (tv))
 #define evtimer_del(ev)			event_del(ev)
@@ -1021,11 +1021,10 @@ int event_base_got_break(struct event_base *);
    Aliases for working with signal events
  */
 /**@{*/
+// 一些操作信号事件的宏
 #define evsignal_add(ev, tv)		event_add((ev), (tv))
 #define evsignal_assign(ev, b, x, cb, arg)			\
-	event_assign((ev), (b), (x), EV_SIGNAL|EV_PERSIST, cb, (arg))
-// 创建一个信号事件处理器，
-// 参数分别是: 所属的base，要处理的信号,回调函数，传给回调函数的参数
+    event_assign((ev), (b), (x), EV_SIGNAL|EV_PERSIST, cb, (arg))
 #define evsignal_new(b, x, cb, arg)				\
 	event_new((b), (x), EV_SIGNAL|EV_PERSIST, (cb), (arg))
 #define evsignal_del(ev)		event_del(ev)

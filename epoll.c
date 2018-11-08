@@ -142,6 +142,8 @@ const struct eventop epollops = {
  */
 #define MAX_EPOLL_TIMEOUT_MSEC (35*60*1000)
 
+// 初始化struct epollop对象,以及是否需要高精度定时timerfd,信号通知socketpair
+// 在event_base_new()中选择I/O机制时同时被调用
 static void *
 epoll_init(struct event_base *base)
 {
@@ -284,6 +286,7 @@ epoll_op_to_string(int op)
 	ch->close_change,                          \
 	change_to_string(ch->close_change)
 
+// 把event_change记录下的内容实际写入到epool当中
 static int
 epoll_apply_one_change(struct event_base *base,
     struct epollop *epollop,
@@ -392,6 +395,7 @@ epoll_apply_changes(struct event_base *base)
 	return (r);
 }
 
+// 把fd的events类型的事件添加到base中，写入epoll
 static int
 epoll_nochangelist_add(struct event_base *base, evutil_socket_t fd,
     short old, short events, void *p)
@@ -410,6 +414,7 @@ epoll_nochangelist_add(struct event_base *base, evutil_socket_t fd,
 		ch.close_change = EV_CHANGE_ADD |
 		    (events & EV_ET);
 
+    // 实际写入到epool
 	return epoll_apply_one_change(base, base->evbase, &ch);
 }
 

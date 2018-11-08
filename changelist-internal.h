@@ -62,6 +62,7 @@ struct event_change {
 	/* The changes that we want to make in reading and writing on this fd.
 	 * If this is a signal, then read_change has EV_CHANGE_SIGNAL set,
 	 * and write_change is unused. */
+    // 我们想要在这个fd上进行读写的变化
 	ev_uint8_t read_change;
 	ev_uint8_t write_change;
 	ev_uint8_t close_change;

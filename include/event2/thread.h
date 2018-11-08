@@ -66,13 +66,16 @@ extern "C" {
 */
 /** A flag passed to a locking callback when the lock was allocated as a
  * read-write lock, and we want to acquire or release the lock for writing. */
+// 仅用于读写锁：为写操作请求或者释放锁
 #define EVTHREAD_WRITE	0x04
 /** A flag passed to a locking callback when the lock was allocated as a
  * read-write lock, and we want to acquire or release the lock for reading. */
+// 仅用于读写锁：为读操作请求或者释放锁
 #define EVTHREAD_READ	0x08
 /** A flag passed to a locking callback when we don't want to block waiting
  * for the lock; if we can't get the lock immediately, we will instead
  * return nonzero from the locking callback. */
+// 仅用于锁定：仅在可以立刻锁定的时候才请求锁定
 #define EVTHREAD_TRY    0x10
 /**@}*/
 

@@ -124,6 +124,7 @@ static const struct eventop *eventops[] = {
 };
 
 /* Global state; deprecated */
+// “当前”event_base 是一个由所有线程共享的全局设置
 struct event_base *event_global_current_base_ = NULL;
 #define current_base event_global_current_base_
 
@@ -479,7 +480,7 @@ event_to_event_callback(struct event *ev)
 	return &ev->ev_evcallback;
 }
 
-// 初始化event_base结构体
+// 初始化event_base结构体，赋值全局current_base
 struct event_base *
 event_init(void)
 {
@@ -971,7 +972,7 @@ event_base_free_nofinalize(struct event_base *base)
 }
 
 // 释放event_base对象
-// 注意：这个函数不会关闭任何fds或者释放在执行event_new时任何传递给callback的参数
+// 注意：这个函数不会释放当前与 event_base 关联的任何事件,或者关闭他们的套接字,或者释放任何指针
 // 如果未决的关闭类型的回调，本函数会唤醒这些回调
 void
 event_base_free(struct event_base *base)
@@ -999,6 +1000,8 @@ const struct eventop nil_eventop = {
 };
 
 /* reinitialize the event base after a fork */
+// 如果在使用 fork()或者其他相关系统调用启动新进程之后,
+// 希望在新子进程中继续使用 event_base,就需要进行重新初始化
 int
 event_reinit(struct event_base *base)
 {
@@ -1209,6 +1212,7 @@ event_config_free(struct event_config *cfg)
 // 设置event_base的工作模式，需要在申请event_config之后运行，在配置event_base之前执行；
 // 可以设置多个工作模式同时存在，但是需要注意的是不是每种工作模式都是可以设置的，
 // 需要查看本地内核环境以及后台方法是否支持
+// 从enum event_base_config_flag中选择
 int
 event_config_set_flag(struct event_config *cfg, int flag)
 {
@@ -1218,9 +1222,8 @@ event_config_set_flag(struct event_config *cfg, int flag)
 	return 0;
 }
 
-// 输入需要屏蔽的方法名字；可以用来避免某些不支持特定文件描述符类型的后台方法，
-// 或者调试用来屏蔽某些特定事件的机制。应用可以使用多个event_bases以适应不兼容的
-// 文件描述符类型
+// 可以通过名字让 libevent 避免使用特定的可用后端,
+// 可以用来避免某些不支持特定文件描述符类型的后台方法
 int
 event_config_avoid_method(struct event_config *cfg, const char *method)
 {
@@ -1241,9 +1244,10 @@ event_config_avoid_method(struct event_config *cfg, const char *method)
 	return (0);
 }
 
-// 设置后台方法特征，注意不是每个平台都会支持所有特征或者支持几个特征同时存在；
+// 设置后台方法特征，让 libevent 不使用不能提供所有指定特征的后端；
 // 设置后台方法特征的代码应该在event_base_new_with_config之前进行；
 // 注意，这里不是采用或的方式，而是直接替换为输入的方法特征
+// EV_FEATURE_ET, EV_FEATURE_O1, EV_FEATURE_FDS, EV_FEATURE_EARLY_CLOSE
 int
 event_config_require_features(struct event_config *cfg,
     int features)
@@ -1254,7 +1258,8 @@ event_config_require_features(struct event_config *cfg,
 	return (0);
 }
 
-// 设置cpu个数提示信息
+// 这个函数当前仅在 Windows 上使用 IOCP 时有用,
+// 告诉 event_config 在生成多线程 event_base 的时候,应该试图使用给定数目的 CPU
 int
 event_config_set_num_cpus_hint(struct event_config *cfg, int cpus)
 {
@@ -1292,6 +1297,7 @@ event_priority_init(int npriorities)
 }
 
 // 设置event_base的优先级个数,并分配base->activequeues
+// 优 先 级 将 从0( 最 高 ) 到n_priorities-1(最低)
 int
 event_base_priority_init(struct event_base *base, int npriorities)
 {
@@ -1576,19 +1582,19 @@ event_base_init_common_timeout(struct event_base *base,
     const struct timeval *duration)
 {
 	int i;
-        struct timeval tv;
+    struct timeval tv;
         // 具有common-timeout标志的超时时间
 	const struct timeval *result=NULL;
 	struct common_timeout_list *new_ctl;
 
 	EVBASE_ACQUIRE_LOCK(base, th_base_lock);
         // 这个时间的微秒位应该进位。用户没有将之进位成秒
-        if (duration->tv_usec > 1000000) {
+    if (duration->tv_usec > 1000000) {
 		memcpy(&tv, duration, sizeof(struct timeval));
 		if (is_common_timeout(duration, base))
-                        // 去除common-timeout标志，获取真正的us值
+            // 去除common-timeout标志，获取真正的us值
 			tv.tv_usec &= MICROSECONDS_MASK;
-                // 进位
+        // 进位
 		tv.tv_sec += tv.tv_usec / 1000000;
 		tv.tv_usec %= 1000000;
 		duration = &tv;
@@ -1963,6 +1969,8 @@ event_dispatch(void)
 }
 
 // Reactor核心，检测事件、分发事件、调用事件
+// 将一直运行,直到没有已经注册的事件了,或者调用了
+// event_base_loopbreak()或者 event_base_loopexit()为止
 int
 event_base_dispatch(struct event_base *event_base)
 {
@@ -1993,7 +2001,9 @@ event_loopexit(const struct timeval *tv)
 		    current_base, tv));
 }
 
-// 经过tv时间后退出loop
+// 经过tv时间后退出loop,如果tv参数为NULL,会立即停止循环,没有延时
+// 如果 event_base 当前正在执行任何激活事件的回调,
+// 则回调会继续运行,直到运行完所有激活事件的回调之才退出
 int
 event_base_loopexit(struct event_base *event_base, const struct timeval *tv)
 {
@@ -2007,6 +2017,8 @@ event_loopbreak(void)
 	return (event_base_loopbreak(current_base));
 }
 
+// 让 event_base 立即退出循环。它与event_base_loopexit(base,NULL)的不同在于,
+// 如果 event_base 当前正在执行激活事件的回调,它将在执行完当前正在处理的事件后立即退出
 int
 event_base_loopbreak(struct event_base *event_base)
 {
@@ -2045,6 +2057,7 @@ event_base_loopcontinue(struct event_base *event_base)
 	return r;
 }
 
+// 检测循环是否是event_base_break退出的
 int
 event_base_got_break(struct event_base *event_base)
 {
@@ -2055,6 +2068,7 @@ event_base_got_break(struct event_base *event_base)
 	return res;
 }
 
+// 检测循环是否是event_base_loopexit退出的
 int
 event_base_got_exit(struct event_base *event_base)
 {
@@ -2561,6 +2575,7 @@ event_callback_finalize_many_(struct event_base *base, int n_cbs, struct event_c
  * changing the priority is going to fail.
  */
 // 设置event的优先级
+// 高优先级的事件先运行,pri越小优先级越高
 int
 event_priority_set(struct event *ev, int pri)
 {
@@ -2582,7 +2597,8 @@ event_priority_set(struct event *ev, int pri)
 /*
  * Checks if a specific event is pending or scheduled.
  */
-// 检查某个事件(由第二个参数指定)是否处于未决或者激活状态
+// 检查事件ev是否处于未决或者激活状态
+// 如果event包含EV_TIMEOUT 标志，则tv会保存事件的超时值
 int
 event_pending(const struct event *ev, short event, struct timeval *tv)
 {
@@ -2599,8 +2615,7 @@ event_pending(const struct event *ev, short event, struct timeval *tv)
         // flags记录用户监听了哪些事件
 	if (ev->ev_flags & EVLIST_INSERTED)
 		flags |= (ev->ev_events & (EV_READ|EV_WRITE|EV_CLOSED|EV_SIGNAL));
-        // flags记录event被什么事件激活了.用户可以调用event_active手动激活event,
-        // 并且可以使用之前用户没有监听的事件作为激活原因
+        // flags记录event被什么事件激活了.
 	if (ev->ev_flags & (EVLIST_ACTIVE|EVLIST_ACTIVE_LATER))
 		flags |= ev->ev_res;
         // 记录该event是否还有超时属性
@@ -2706,9 +2721,9 @@ event_get_priority(const struct event *ev)
 	return ev->ev_pri;
 }
 
-// 将event注册到base中,在event_new或者event_assign之后执行
+// 在event_new或者event_assign之后执行,将非未决的event注册到base中，成为未决状态.
 // 参数 ev：通过event_assign或者event_new初始化过的事件
-// 参数timeout：等待事件执行的最长时间，如果NULL则从来不会超时，即永久等待
+// 参数 tv：等待事件执行的最长时间，如果NULL则从来不会超时，即永久等待
 // 包括IO事件、信号事件、定时事件
 // 定时事件：
 //（1）最小堆：时间超时时间存储在最小堆，每次执行超时任务都从最小堆堆顶取任务执行
@@ -3057,6 +3072,7 @@ event_add_nolock_(struct event *ev, const struct timeval *tv,
 }
 
 // 内部删除事件函数
+// 将使event成为非未决和非激活的
 static int
 event_del_(struct event *ev, int blocking)
 {
@@ -3938,6 +3954,7 @@ event_mm_free_(void *ptr)
 		free(ptr);
 }
 
+// 设定自己的内存管理相关函数
 void
 event_set_mem_functions(void *(*malloc_fn)(size_t sz),
 			void *(*realloc_fn)(void *ptr, size_t sz),
@@ -4188,7 +4205,7 @@ event_base_foreach_event(struct event_base *base,
 	return r;
 }
 
-
+// 把event_base 的事件及其状态的完整列表存到文件中
 void
 event_base_dump_events(struct event_base *base, FILE *output)
 {
