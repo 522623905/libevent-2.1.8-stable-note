@@ -97,11 +97,17 @@ extern "C" {
 
     @{
 */
+// 读取操作时发生某事件,如超时,具体是哪种事件请看其他标志
 #define BEV_EVENT_READING	0x01	/**< error encountered while reading */
+// 写入操作时发生某事件,如超时,具体是哪种事件请看其他标志
 #define BEV_EVENT_WRITING	0x02	/**< error encountered while writing */
+// 遇到文件结束指示
 #define BEV_EVENT_EOF		0x10	/**< eof file reached */
+// 操作时发生错误。关于错误的更多信息,请调用EVUTIL_SOCKET_ERROR()
 #define BEV_EVENT_ERROR		0x20	/**< unrecoverable error encountered */
+// 发生超时
 #define BEV_EVENT_TIMEOUT	0x40	/**< user-specified timeout reached */
+// 请求的连接过程已经完成
 #define BEV_EVENT_CONNECTED	0x80	/**< connect operation finished. */
 /**@}*/
 
@@ -154,22 +160,28 @@ typedef void (*bufferevent_data_cb)(struct bufferevent *bev, void *ctx);
 typedef void (*bufferevent_event_cb)(struct bufferevent *bev, short what, void *ctx);
 
 /** Options that can be specified when creating a bufferevent */
+// 创建bufferevent 的选项标志
 enum bufferevent_options {
 	/** If set, we close the underlying file
 	 * descriptor/bufferevent/whatever when this bufferevent is freed. */
+    // 释放 bufferevent 时关闭底层传输端口
 	BEV_OPT_CLOSE_ON_FREE = (1<<0),
 
 	/** If set, and threading is enabled, operations on this bufferevent
 	 * are protected by a lock */
+    // 自动为 bufferevent 分配锁,可以安全地在多个线程中使用 bufferevent
 	BEV_OPT_THREADSAFE = (1<<1),
 
 	/** If set, callbacks are run deferred in the event loop. */
+    // 设置这个标志时,bufferevent 延迟所有回调
+    // 在 event_loop()调用中被排队,然后在通常的事件回调之后执行
 	BEV_OPT_DEFER_CALLBACKS = (1<<2),
 
 	/** If set, callbacks are executed without locks being held on the
 	* bufferevent.  This option currently requires that
 	* BEV_OPT_DEFER_CALLBACKS also be set; a future version of Libevent
 	* might remove the requirement.*/
+    // 在执行回调的时候不进行锁定
 	BEV_OPT_UNLOCK_CALLBACKS = (1<<3)
 };
 
@@ -593,13 +605,13 @@ int bufferevent_decref(struct bufferevent *bufev);
    deal with the incoming data.
 */
 enum bufferevent_flush_mode {
-	/** usually set when processing data */
+    /** usually set when processing data */
 	BEV_NORMAL = 0,
 
-	/** want to checkpoint all data sent. */
+    /** want to checkpoint all data sent. */
 	BEV_FLUSH = 1,
 
-	/** encountered EOF on read or done sending data */
+    /** encountered EOF on read or done sending data */
 	BEV_FINISHED = 2
 };
 
@@ -697,6 +709,9 @@ enum bufferevent_filter_result {
        produce any more output until we get some input; and BEV_ERROR
        on an error.
  */
+// 两个过滤器函数都有一对 evbuffer 参数:从 source
+// 读取数据;向 destination 写入数据,而 dst_limit 参数描述了可以写入 destination 的字节数
+// 上限;mode 参数向过滤器描述了写入的方式;ctx 参数就是传递给 bufferevent_filter_new()函数的指针
 typedef enum bufferevent_filter_result (*bufferevent_filter_cb)(
     struct evbuffer *src, struct evbuffer *dst, ev_ssize_t dst_limit,
     enum bufferevent_flush_mode mode, void *ctx);

@@ -76,6 +76,7 @@ extern "C" {
 
 typedef ev_uint16_t bufferevent_suspend_flags;
 
+// 速率限制组
 struct bufferevent_rate_limit_group {
 	/** List of all members in the group */
 	LIST_HEAD(rlim_group_member_list, bufferevent_private) members;
@@ -202,6 +203,7 @@ struct bufferevent_private {
 	int dns_error;
 
 	/** Used to implement deferred callbacks */
+    // 条件满足时,延迟回调不会立即调用,而是在 event_loop()调用中被排队,然后在通常的事件回调之后执行
 	struct event_callback deferred;
 
 	/** The options this bufferevent was constructed with */

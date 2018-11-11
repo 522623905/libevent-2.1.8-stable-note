@@ -1112,6 +1112,7 @@ set_handshake_callbacks(struct bufferevent_openssl *bev_ssl, evutil_socket_t fd)
 	}
 }
 
+// 要求 SSL 重新协商,bufferevent 会调用合适的回调函数
 int
 bufferevent_ssl_renegotiate(struct bufferevent *bev)
 {
@@ -1322,6 +1323,7 @@ be_openssl_ctrl(struct bufferevent *bev,
 	}
 }
 
+// 返回 OpenSSL bufferevent 使用的 SSL 对象
 SSL *
 bufferevent_openssl_get_ssl(struct bufferevent *bufev)
 {
@@ -1397,6 +1399,7 @@ err:
 	return NULL;
 }
 
+// 创建基于过滤器的、在另一个底层 bufferevent 之上进行通信的 buffervent
 struct bufferevent *
 bufferevent_openssl_filter_new(struct event_base *base,
     struct bufferevent *underlying,
@@ -1419,6 +1422,7 @@ bufferevent_openssl_filter_new(struct event_base *base,
 		base, underlying, -1, ssl, state, options);
 }
 
+// 创建基于套接字的、直接使用 OpenSSL 进行网络通信的 bufferevent
 struct bufferevent *
 bufferevent_openssl_socket_new(struct event_base *base,
     evutil_socket_t fd,
@@ -1486,6 +1490,7 @@ bufferevent_openssl_set_allow_dirty_shutdown(struct bufferevent *bev,
 	BEV_UNLOCK(bev);
 }
 
+// 返回给定 bufferevent 的第一个未决的 OpenSSL 错误
 unsigned long
 bufferevent_get_openssl_error(struct bufferevent *bev)
 {

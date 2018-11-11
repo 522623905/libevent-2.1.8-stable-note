@@ -61,7 +61,7 @@ extern "C" {
  * when bytes are added to or removed from the evbuffer. */
 // 内部结构体，结构体成员对用户透明
 // evbuffer的单个evbuffer回调。
-// 当在evbuffer中添加或删除字节时，将调用此函数
+// 当在evbuffer中添加或删除字节时，将调用此回调函数
 struct evbuffer_cb_entry {
 	/** Structures to implement a doubly-linked queue of callbacks */
 	LIST_ENTRY(evbuffer_cb_entry) next;
@@ -83,7 +83,7 @@ struct evbuffer_cb_entry {
 
 struct bufferevent;
 struct evbuffer_chain;
-// Libevent将缓冲数据都存放到buffer中。
+// Libevent将网络 IO 的缓冲数据都存放到evbuffer中。
 // 通过一个个的evbuffer_chain连成的链表可以存放很多的缓冲数据
 struct evbuffer {
 	/** The first chain in this buffer's linked list of chains. */
@@ -165,7 +165,7 @@ struct evbuffer {
 	struct event_callback deferred;
 
 	/** A doubly-linked-list of callback functions */
-    // buffer的回调函数
+    // evbuffer的回调函数链表,单个 evbuffer 可以设置多个回调
 	LIST_HEAD(evbuffer_cb_queue, evbuffer_cb_entry) callbacks;
 
 	/** The parent bufferevent object this evbuffer belongs to.
@@ -186,6 +186,7 @@ typedef ev_off_t ev_misalign_t;
 #endif
 
 /** A single item in an evbuffer. */
+// evbuffer链表的一项buffer
 struct evbuffer_chain {
 	/** points to next buffer in the chain */
 	struct evbuffer_chain *next;

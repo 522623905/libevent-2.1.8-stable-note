@@ -496,7 +496,7 @@ bufferevent_socket_connect(struct bufferevent *bev,
 		}
     } else if (r == 1) {
 		/* The connect succeeded already. How very BSD of it. */
-        //已经连接上了，则手动激活这个event，调用写回调函数
+        // 已经连接上了，则手动激活这个event，调用写回调函数
 		result = 0;
         bufev_p->connecting = 1;
 		bufferevent_trigger_nolock_(bev, EV_WRITE, BEV_OPT_DEFER_CALLBACKS);
@@ -558,6 +558,11 @@ bufferevent_connect_getaddrinfo_cb(int result, struct evutil_addrinfo *ai,
 	evutil_freeaddrinfo(ai);
 }
 
+// 通过主机名hostname启动连接.
+// 如果名字解析失败,函数将调用事件回调,报告错误事件.
+// 如果解析成功,函数将启动连接请求.
+// dns_base: 如果为 NULL,等待名字查找完成期间调用线程将被阻塞;
+// 如果提供 dns_base 参数,libevent 将使用它来异步地查询主机名
 int
 bufferevent_socket_connect_hostname(struct bufferevent *bev,
     struct evdns_base *evdns_base, int family, const char *hostname, int port)
@@ -717,6 +722,7 @@ be_socket_setfd(struct bufferevent *bufev, evutil_socket_t fd)
 }
 
 /* XXXX Should non-socket bufferevents support this? */
+// 调整 bufev 的优先级为 pri
 int
 bufferevent_priority_set(struct bufferevent *bufev, int priority)
 {

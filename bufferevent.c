@@ -376,7 +376,7 @@ bufferevent_init_common_(struct bufferevent_private *bufev_private,
 	return 0;
 }
 
-// 设置bufferevent回调函数
+// 设置bufferevent回调函数，设置后需要使用bufferevent_enable函数激活
 void
 bufferevent_setcb(struct bufferevent *bufev,
     bufferevent_data_cb readcb, bufferevent_data_cb writecb,
@@ -440,7 +440,7 @@ bufferevent_get_priority(const struct bufferevent *bufev)
 	}
 }
 
-// 把data写入到output缓冲区
+// 从data处开始的size字节添加到bufferevent的output缓冲区末尾
 int
 bufferevent_write(struct bufferevent *bufev, const void *data, size_t size)
 {
@@ -450,6 +450,7 @@ bufferevent_write(struct bufferevent *bufev, const void *data, size_t size)
 	return 0;
 }
 
+// 移除 buf 的所有内容,将其放置到输出缓冲区的末尾
 int
 bufferevent_write_buffer(struct bufferevent *bufev, struct evbuffer *buf)
 {
@@ -459,12 +460,16 @@ bufferevent_write_buffer(struct bufferevent *bufev, struct evbuffer *buf)
 	return 0;
 }
 
+// 至多从输入缓冲区移除size字节的数据,将其存储到内存中data处
+// 返 回 实 际 移 除 的 字 节 数
 size_t
 bufferevent_read(struct bufferevent *bufev, void *data, size_t size)
 {
 	return (evbuffer_remove(bufev->input, data, size));
 }
 
+// 抽空输入缓冲区的所有内容,将其放置到 buf 中,
+// 成功时返回0,失败时返回-1
 int
 bufferevent_read_buffer(struct bufferevent *bufev, struct evbuffer *buf)
 {
@@ -527,6 +532,8 @@ bufferevent_set_timeouts(struct bufferevent *bufev,
 
 
 /* Obsolete; use bufferevent_set_timeouts */
+// 试图读取/写入数据的时候,如果至少等待了 timeout_read 秒,则读取/写入超时事件将被触发
+// 注意,只有在读取或者写入的时候才会计算超时
 void
 bufferevent_settimeout(struct bufferevent *bufev,
 		       int timeout_read, int timeout_write)
@@ -586,9 +593,17 @@ bufferevent_disable(struct bufferevent *bufev, short event)
 /*
  * Sets the water marks
  */
-// 设置events事件(读或写)的低、高水位标志
-// 读事件的低水位: 当可读的数据量到达这个低水位后，才会调用用户设置的回调函数
-// 读事件的高水位: 把读事件的evbuffer的数据量限制在高水位之下,控制evbuffer的大小
+/*   设置bufferevent事件(读或写)的低、高水位标志
+ *   读取低水位:读取操作使得输入缓冲区的数据量在此级别或者更高时,读取回调将被调用,
+ *       默认值为0,所以每个读取操作都会导致读取回调被调用.
+ *   读取高水位:输入缓冲区中的数据量达到此级别后, bufferevent 将停止读取,直到输
+ *       入缓冲区中足够量的数据被抽取,使得数据量低于此级别。默认值是无限,所以永远不
+ *       会因为输入缓冲区的大小而停止读取
+ *   写入低水位:写入操作使得输出缓冲区的数据量达到或者低于此级别时,写入回调将被调用。
+ *       默认值是0,所以只有输出缓冲区空的时候才会调用写入回调
+ *   写入高水位:bufferevent 没有直接使用这个水位。它在 bufferevent 用作另外一个
+ *       bufferevent 的底层传输端口时有特殊意义
+*/
 void
 bufferevent_setwatermark(struct bufferevent *bufev, short events,
     size_t lowmark, size_t highmark)
@@ -667,6 +682,10 @@ bufferevent_getwatermark(struct bufferevent *bufev, short events,
 	return -1;
 }
 
+// 清空 bufferevent,要求 bufferevent 强制从底层传输端口读取或者写入尽可能多的数据
+// iotype: EV_READ、 EV_WRITE 或者 EV_READ | EV_WRITE
+// state: BEV_NORMAL、BEV_FLUSH 或者 BEV_FINISHED
+// 套接字的 bufferevent 没有实现该功能？？
 int
 bufferevent_flush(struct bufferevent *bufev,
     short iotype,
@@ -923,6 +942,7 @@ bufferevent_cancel_all_(struct bufferevent *bev)
 	BEV_UNLOCK(bev);
 }
 
+// 确定 bufferevent 上当前启用的事件
 short
 bufferevent_get_enabled(struct bufferevent *bufev)
 {
@@ -933,6 +953,7 @@ bufferevent_get_enabled(struct bufferevent *bufev)
 	return r;
 }
 
+// 返回作为 bufferevent 底层传输端口的另一个 bufferevent
 struct bufferevent *
 bufferevent_get_underlying(struct bufferevent *bev)
 {
@@ -1036,12 +1057,14 @@ bufferevent_add_event_(struct event *ev, const struct timeval *tv)
 
 /* For use by user programs only; internally, we should be calling
    either bufferevent_incref_and_lock_(), or BEV_LOCK. */
+// 手动锁定 bufferevent 的函数,确保对 bufferevent 的一些操作是原子地执行的
 void
 bufferevent_lock(struct bufferevent *bev)
 {
 	bufferevent_incref_and_lock_(bev);
 }
 
+// 手动解锁 bufferevent 的函数,确保对 bufferevent 的一些操作是原子地执行的
 void
 bufferevent_unlock(struct bufferevent *bev)
 {

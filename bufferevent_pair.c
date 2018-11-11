@@ -111,6 +111,8 @@ bufferevent_pair_elt_new(struct event_base *base,
 	return bufev;
 }
 
+// 创建一对成对的 bufferevent,pair[0]和 pair[1]为一对相互连接的 bufferevent
+// 这样,写入到一个 bufferevent 的字节都被另一个接收(反过来也是),但是不需要使用套接字
 int
 bufferevent_pair_new(struct event_base *base, int options,
     struct bufferevent *pair[2])
@@ -336,6 +338,7 @@ be_pair_flush(struct bufferevent *bev, short iotype,
 	return 0;
 }
 
+// 获取另一个成员
 struct bufferevent *
 bufferevent_pair_get_partner(struct bufferevent *bev)
 {

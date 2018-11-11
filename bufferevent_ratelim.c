@@ -139,6 +139,9 @@ ev_token_bucket_get_tick_(const struct timeval *tv,
 	return (unsigned)(msec / cfg->msec_per_tick);
 }
 
+// 创建ev_token_bucket_cfg
+// 提供最大平均读取速率、最大突发读取量、最大平均写入速率、最大突发写入量,以及一个滴答的长度
+// 如果 tick_len 参数为 NULL,则默认的滴答长度为一秒
 struct ev_token_bucket_cfg *
 ev_token_bucket_cfg_new(size_t read_rate, size_t read_burst,
     size_t write_rate, size_t write_burst,
@@ -556,6 +559,8 @@ bev_group_refill_callback_(evutil_socket_t fd, short what, void *arg)
 	UNLOCK_GROUP(g);
 }
 
+// 限 制 bufferevent 的 传 输 速 率
+// cfg 为NULL时，表示移除速率限制
 int
 bufferevent_set_rate_limit(struct bufferevent *bev,
     struct ev_token_bucket_cfg *cfg)
@@ -635,6 +640,7 @@ done:
 	return r;
 }
 
+// 创建速率限制组
 struct bufferevent_rate_limit_group *
 bufferevent_rate_limit_group_new(struct event_base *base,
     const struct ev_token_bucket_cfg *cfg)
@@ -669,6 +675,7 @@ bufferevent_rate_limit_group_new(struct event_base *base,
 	return g;
 }
 
+// 修改组的速率限制
 int
 bufferevent_rate_limit_group_set_cfg(
 	struct bufferevent_rate_limit_group *g,
@@ -700,6 +707,7 @@ bufferevent_rate_limit_group_set_cfg(
 	return 0;
 }
 
+// 设置速率限制组的最小可能共享,min_share 为0将会完全禁止最小共享
 int
 bufferevent_rate_limit_group_set_min_share(
 	struct bufferevent_rate_limit_group *g,
@@ -721,6 +729,7 @@ bufferevent_rate_limit_group_set_min_share(
 	return 0;
 }
 
+// 释放速率限制组,移除所有成员
 void
 bufferevent_rate_limit_group_free(struct bufferevent_rate_limit_group *g)
 {
@@ -732,6 +741,7 @@ bufferevent_rate_limit_group_free(struct bufferevent_rate_limit_group *g)
 	mm_free(g);
 }
 
+// 将bufferevent 添加到速率限制组中
 int
 bufferevent_add_to_rate_limit_group(struct bufferevent *bev,
     struct bufferevent_rate_limit_group *g)
@@ -779,10 +789,11 @@ bufferevent_add_to_rate_limit_group(struct bufferevent *bev,
 	return 0;
 }
 
+// 从速率限制组中删除 bufferevent
 int
 bufferevent_remove_from_rate_limit_group(struct bufferevent *bev)
 {
-	return bufferevent_remove_from_rate_limit_group_internal_(bev, 1);
+    return bufferevent_remove_from_rate_limit_group_internal_(bev, 1);
 }
 
 int
@@ -1064,6 +1075,7 @@ bufferevent_rate_limit_group_decrement_write(
 	return r;
 }
 
+// 获取组的总读取和写入字节数
 void
 bufferevent_rate_limit_group_get_totals(struct bufferevent_rate_limit_group *grp,
     ev_uint64_t *total_read_out, ev_uint64_t *total_written_out)

@@ -2221,6 +2221,8 @@ evutil_format_sockaddr_port_(const struct sockaddr *sa, char *out, size_t outlen
 	return out;
 }
 
+// 比较两个地址,如果 sa1在 sa2前面,返回负数;
+// 如果二者相等,则返回0; 如果 sa2在 sa1前面,则返回正数
 int
 evutil_sockaddr_cmp(const struct sockaddr *sa1, const struct sockaddr *sa2,
     int include_port)

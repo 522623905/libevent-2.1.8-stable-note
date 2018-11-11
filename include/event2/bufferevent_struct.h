@@ -54,6 +54,7 @@ extern "C" {
 /* For struct event */
 #include <event2/event_struct.h>
 
+// 水位标志
 struct event_watermark {
 	size_t low;
 	size_t high;
@@ -96,7 +97,17 @@ struct bufferevent {
     // 写缓冲区
 	struct evbuffer *output;
 
-    // 读水位,写水位
+    /*
+     *   读取低水位:读取操作使得输入缓冲区的数据量在此级别或者更高时,读取回调将被调用,
+     *       默认值为0,所以每个读取操作都会导致读取回调被调用.
+     *   读取高水位:输入缓冲区中的数据量达到此级别后, bufferevent 将停止读取,直到输
+     *       入缓冲区中足够量的数据被抽取,使得数据量低于此级别。默认值是无限,所以永远不
+     *       会因为输入缓冲区的大小而停止读取
+     *   写入低水位:写入操作使得输出缓冲区的数据量达到或者低于此级别时,写入回调将被调用。
+     *       默认值是0,所以只有输出缓冲区空的时候才会调用写入回调
+     *   写入高水位:bufferevent 没有直接使用这个水位。它在 bufferevent 用作另外一个
+     *       bufferevent 的底层传输端口时有特殊意义
+    */
 	struct event_watermark wm_read;
 	struct event_watermark wm_write;
 

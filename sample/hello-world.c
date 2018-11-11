@@ -128,7 +128,7 @@ conn_writecb(struct bufferevent *bev, void *user_data)
     // 输出buffer
 	struct evbuffer *output = bufferevent_get_output(bev);
     // 判断数据是否已经发送完成
-	if (evbuffer_get_length(output) == 0) {
+    if (evbuffer_get_length(output) == 0) {
 		printf("flushed answer\n");
         // 释放缓冲区
 		bufferevent_free(bev);

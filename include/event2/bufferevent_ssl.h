@@ -47,8 +47,11 @@ struct ssl_st;
    SSL bufferevent.
  */
 enum bufferevent_ssl_state {
+    // SSL 握 手 已 经 完 成
 	BUFFEREVENT_SSL_OPEN = 0,
+    // SSL 当前作为客户端在进行协商
 	BUFFEREVENT_SSL_CONNECTING = 1,
+    // SSL 当前作为服务器在进行协商
 	BUFFEREVENT_SSL_ACCEPTING = 2
 };
 

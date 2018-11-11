@@ -165,6 +165,9 @@ evutil_secure_rng_set_urandom_device_file(char *fname)
 	return 0;
 }
 
+// 如果没有播种过,则播种 RNG,并在成功时返回0,
+// 返回-1则表示 libevent 无法在操作系统中找到合适的熵源(source of entropy),
+// 如果不自己初始化 RNG,就无法安全使用 RNG 了
 int
 evutil_secure_rng_init(void)
 {
@@ -186,6 +189,7 @@ ev_arc4random_buf(void *buf, size_t n)
 
 #endif /* } !EVENT__HAVE_ARC4RANDOM */
 
+// 用随机数据填充 buf 处的 n 个字节
 void
 evutil_secure_rng_get_bytes(void *buf, size_t n)
 {

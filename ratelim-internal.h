@@ -45,6 +45,7 @@ struct ev_token_bucket {
 };
 
 /** Configuration info for a token bucket or set of token buckets. */
+// 用于限制单个或者一组 bufferevent 速率的一对记号存储器的配置值
 struct ev_token_bucket_cfg {
 	/** How many bytes are we willing to read on average per tick? */
 	size_t read_rate;

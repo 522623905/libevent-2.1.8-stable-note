@@ -166,6 +166,12 @@ be_null_filter(struct evbuffer *src, struct evbuffer *dst, ev_ssize_t lim,
 		return BEV_ERROR;
 }
 
+// 创建一个封装现有的“底层”bufferevent 的过滤 bufferevent
+// 所有通过底层 bufferevent 接收的数据在到达过滤 bufferevent 之前都会经过“输入”过滤器的转换;
+// 所有通过底层 bufferevent 发送的数据在被发送到底层 bufferevent 之前都会经过“输出”过滤器的转换
+// options: 支持所有通常的选项
+// ctx: 是传递给过滤函数的任意指针
+// free_context: 在释放ctx 之前它会被调用
 struct bufferevent *
 bufferevent_filter_new(struct bufferevent *underlying,
 		       bufferevent_filter_cb input_filter,
