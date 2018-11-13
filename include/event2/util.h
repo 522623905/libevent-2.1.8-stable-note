@@ -686,31 +686,37 @@ struct evutil_addrinfo {
     @{
 */
 #if defined(EAI_ADDRFAMILY) && defined(EVENT__HAVE_GETADDRINFO)
+// 请求的地址族对 nodename 没有意义
 #define EVUTIL_EAI_ADDRFAMILY EAI_ADDRFAMILY
 #else
 #define EVUTIL_EAI_ADDRFAMILY -901
 #endif
 #if defined(EAI_AGAIN) && defined(EVENT__HAVE_GETADDRINFO)
+// 名字解析中发生可以恢复的错误,请稍后重试
 #define EVUTIL_EAI_AGAIN EAI_AGAIN
 #else
 #define EVUTIL_EAI_AGAIN -902
 #endif
 #if defined(EAI_BADFLAGS) && defined(EVENT__HAVE_GETADDRINFO)
+// ai_flags 字段无效
 #define EVUTIL_EAI_BADFLAGS EAI_BADFLAGS
 #else
 #define EVUTIL_EAI_BADFLAGS -903
 #endif
 #if defined(EAI_FAIL) && defined(EVENT__HAVE_GETADDRINFO)
+// 解析器或者 DNS 服务器可能已经崩溃
 #define EVUTIL_EAI_FAIL EAI_FAIL
 #else
 #define EVUTIL_EAI_FAIL -904
 #endif
 #if defined(EAI_FAMILY) && defined(EVENT__HAVE_GETADDRINFO)
+// 不支持 ai_family 字段
 #define EVUTIL_EAI_FAMILY EAI_FAMILY
 #else
 #define EVUTIL_EAI_FAMILY -905
 #endif
 #if defined(EAI_MEMORY) && defined(EVENT__HAVE_GETADDRINFO)
+// 回应请求的过程耗尽内存
 #define EVUTIL_EAI_MEMORY EAI_MEMORY
 #else
 #define EVUTIL_EAI_MEMORY -906
@@ -719,6 +725,7 @@ struct evutil_addrinfo {
  * remove NODATA or redefine it to be the same as NONAME, in a
  * fun interpretation of RFC 2553 and RFC 3493. */
 #if defined(EAI_NODATA) && defined(EVENT__HAVE_GETADDRINFO) && (!defined(EAI_NONAME) || EAI_NODATA != EAI_NONAME)
+// 请求的主机不存在
 #define EVUTIL_EAI_NODATA EAI_NODATA
 #else
 #define EVUTIL_EAI_NODATA -907
@@ -729,49 +736,59 @@ struct evutil_addrinfo {
 #define EVUTIL_EAI_NONAME -908
 #endif
 #if defined(EAI_SERVICE) && defined(EVENT__HAVE_GETADDRINFO)
+// 请求的服务不存在
 #define EVUTIL_EAI_SERVICE EAI_SERVICE
 #else
 #define EVUTIL_EAI_SERVICE -909
 #endif
 #if defined(EAI_SOCKTYPE) && defined(EVENT__HAVE_GETADDRINFO)
+// 不支持请求的套接字类型,或者套接字类型与 ai_protocol 不匹配
 #define EVUTIL_EAI_SOCKTYPE EAI_SOCKTYPE
 #else
 #define EVUTIL_EAI_SOCKTYPE -910
 #endif
 #if defined(EAI_SYSTEM) && defined(EVENT__HAVE_GETADDRINFO)
+// 名字解析中发生其他系统错误,更多信息请检查 errno
 #define EVUTIL_EAI_SYSTEM EAI_SYSTEM
 #else
 #define EVUTIL_EAI_SYSTEM -911
 #endif
 
+// 应用程序在解析完成前请求取消
 #define EVUTIL_EAI_CANCEL -90001
 
 #if defined(AI_PASSIVE) && defined(EVENT__HAVE_GETADDRINFO)
+// 这个标志指示将地址用于监听,而不是连接
 #define EVUTIL_AI_PASSIVE AI_PASSIVE
 #else
 #define EVUTIL_AI_PASSIVE 0x1000
 #endif
 #if defined(AI_CANONNAME) && defined(EVENT__HAVE_GETADDRINFO)
+// 试图在 ai_canonname 字段中报告标准名称
 #define EVUTIL_AI_CANONNAME AI_CANONNAME
 #else
 #define EVUTIL_AI_CANONNAME 0x2000
 #endif
 #if defined(AI_NUMERICHOST) && defined(EVENT__HAVE_GETADDRINFO)
+// 仅仅解析数值类型的 IPv4和 IPv6地址
 #define EVUTIL_AI_NUMERICHOST AI_NUMERICHOST
 #else
 #define EVUTIL_AI_NUMERICHOST 0x4000
 #endif
 #if defined(AI_NUMERICSERV) && defined(EVENT__HAVE_GETADDRINFO)
+// 仅仅解析数值类型的服务名
 #define EVUTIL_AI_NUMERICSERV AI_NUMERICSERV
 #else
 #define EVUTIL_AI_NUMERICSERV 0x8000
 #endif
 #if defined(AI_V4MAPPED) && defined(EVENT__HAVE_GETADDRINFO)
+// 以 v4映射型 IPv6地址的形式返回结果中的 IPv4地址
 #define EVUTIL_AI_V4MAPPED AI_V4MAPPED
 #else
 #define EVUTIL_AI_V4MAPPED 0x10000
 #endif
 #if defined(AI_ALL) && defined(EVENT__HAVE_GETADDRINFO)
+// 以 v4映射型 IPv6地址的形式返回
 #define EVUTIL_AI_ALL AI_ALL
 #else
 #define EVUTIL_AI_ALL 0x20000

@@ -68,12 +68,22 @@ struct event_watermark {
   should really not rely on the layout, size, or contents of this structure:
   it is fairly volatile, and WILL change in future versions of the code.
 **/
+/*
+* 数据缓冲bufferevent 在读取或者写入了足够量的数据之后调用用户提供的回调.
+* bufferevent提供输入和输出缓冲区，可自动填充和排出.
+* bufferevent的用户不再直接处理I / O，而是从输入读取并写入输出缓冲区.
+* 启用读取时，bufferevent将自动尝试从文件描述符读取其输入缓冲区，并调用读取回调.
+* 当启用写入时，bufferevent将自动尝试在输出缓冲区具有足够数据时将数据写入其文件描述符，
+* 并在输出缓冲区充分耗尽时调用写入回调.
+* 可查看bufferevent_sock.c中的：
+*    bufferevent_socket_new() , bufferevent_readcb() ， bufferevent_writecb()
+*/
 struct bufferevent {
 	/** Event base for which this bufferevent was created. */
 	struct event_base *ev_base;
 	/** Pointer to a table of function pointers to set up how this
 	    bufferevent behaves. */
-    // 操作结构体，成员有一些函数指针。类似struct eventop结构体
+    // 操作结构体，成员是一些函数指针
 	const struct bufferevent_ops *be_ops;
 
 	/** A read event that triggers when a timeout has happened or a socket

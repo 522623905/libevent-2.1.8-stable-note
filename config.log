@@ -33,7 +33,8 @@ PATH: /usr/sbin
 PATH: /usr/bin
 PATH: /sbin
 PATH: /bin
-PATH: /snap/bin
+PATH: /usr/games
+PATH: /usr/local/games
 
 
 ## ----------- ##
@@ -600,7 +601,7 @@ configure:13116: checking for zlib.h
 configure:13116: result: yes
 configure:13132: checking for library containing inflateEnd
 configure:13163: gcc -o conftest -g -O2 -Wall -fno-strict-aliasing   conftest.c  >&5
-/tmp/cckJTB5b.o: In function `main':
+/tmp/cc5thFF7.o: In function `main':
 /home/long/libevent-2.1.8-stable/conftest.c:42: undefined reference to `inflateEnd'
 collect2: error: ld returned 1 exit status
 configure:13163: $? = 1
@@ -1708,7 +1709,7 @@ configure:14192: $? = 0
 configure:14192: result: yes
 configure:14192: checking for arc4random
 configure:14192: gcc -o conftest -g -O2 -Wall -fno-strict-aliasing   conftest.c  >&5
-/tmp/cc1WrbkL.o: In function `main':
+/tmp/ccqFXvCC.o: In function `main':
 /home/long/libevent-2.1.8-stable/conftest.c:104: undefined reference to `arc4random'
 collect2: error: ld returned 1 exit status
 configure:14192: $? = 1
@@ -1823,7 +1824,7 @@ configure: failed program was:
 configure:14192: result: no
 configure:14192: checking for arc4random_buf
 configure:14192: gcc -o conftest -g -O2 -Wall -fno-strict-aliasing   conftest.c  >&5
-/tmp/ccvkDlXN.o: In function `main':
+/tmp/ccIYuLvG.o: In function `main':
 /home/long/libevent-2.1.8-stable/conftest.c:104: undefined reference to `arc4random_buf'
 collect2: error: ld returned 1 exit status
 configure:14192: $? = 1
@@ -1982,7 +1983,7 @@ configure:14192: $? = 0
 configure:14192: result: yes
 configure:14192: checking for issetugid
 configure:14192: gcc -o conftest -g -O2 -Wall -fno-strict-aliasing   conftest.c  >&5
-/tmp/cc25LwBf.o: In function `main':
+/tmp/ccwi6dkf.o: In function `main':
 /home/long/libevent-2.1.8-stable/conftest.c:115: undefined reference to `issetugid'
 collect2: error: ld returned 1 exit status
 configure:14192: $? = 1
@@ -2108,7 +2109,7 @@ configure: failed program was:
 configure:14192: result: no
 configure:14192: checking for mach_absolute_time
 configure:14192: gcc -o conftest -g -O2 -Wall -fno-strict-aliasing   conftest.c  >&5
-/tmp/cc2kcUeg.o: In function `main':
+/tmp/ccWXDexe.o: In function `main':
 /home/long/libevent-2.1.8-stable/conftest.c:115: undefined reference to `mach_absolute_time'
 collect2: error: ld returned 1 exit status
 configure:14192: $? = 1
@@ -2278,7 +2279,7 @@ configure:14192: $? = 0
 configure:14192: result: yes
 configure:14192: checking for strlcpy
 configure:14192: gcc -o conftest -g -O2 -Wall -fno-strict-aliasing   conftest.c  >&5
-/tmp/ccmDbdlL.o: In function `main':
+/tmp/cc1C2PzB.o: In function `main':
 /home/long/libevent-2.1.8-stable/conftest.c:126: undefined reference to `strlcpy'
 collect2: error: ld returned 1 exit status
 configure:14192: $? = 1
@@ -2611,7 +2612,7 @@ configure: failed program was:
 configure:14674: result: no
 configure:14686: checking for port_create
 configure:14686: gcc -o conftest -g -O2 -Wall -fno-strict-aliasing   conftest.c  >&5
-/tmp/ccxELmhj.o: In function `main':
+/tmp/ccrSpmeg.o: In function `main':
 /home/long/libevent-2.1.8-stable/conftest.c:142: undefined reference to `port_create'
 collect2: error: ld returned 1 exit status
 configure:14686: $? = 1
@@ -6380,7 +6381,7 @@ conftest.c:135:22: warning: null argument where non-null required (argument 3) [
 conftest.c:133:15: warning: 'th' is used uninitialized in this function [-Wuninitialized]
  pthread_t th; pthread_join(th, 0);
                ^~~~~~~~~~~~~~~~~~~
-/tmp/cck0uWMS.o: In function `main':
+/tmp/ccLYeeus.o: In function `main':
 /home/long/libevent-2.1.8-stable/conftest.c:133: undefined reference to `pthread_join'
 /home/long/libevent-2.1.8-stable/conftest.c:134: undefined reference to `__pthread_register_cancel'
 /home/long/libevent-2.1.8-stable/conftest.c:135: undefined reference to `pthread_create'
@@ -7000,7 +7001,7 @@ configure:15912: $? = 0
 configure:15929: result: 8
 configure:15993: checking for library containing ERR_remove_thread_state
 configure:16024: gcc -o conftest -g -O2 -Wall -fno-strict-aliasing -pthread   conftest.c  >&5
-/tmp/ccsndkN6.o: In function `main':
+/tmp/ccXt121M.o: In function `main':
 /home/long/libevent-2.1.8-stable/conftest.c:142: undefined reference to `ERR_remove_thread_state'
 collect2: error: ld returned 1 exit status
 configure:16024: $? = 1
@@ -7335,7 +7336,6 @@ config.status:1251: creating libevent_extra.pc
 config.status:1251: creating Makefile
 config.status:1251: creating config.h
 config.status:1251: creating evconfig-private.h
-config.status:1432: evconfig-private.h is unchanged
 config.status:1480: executing depfiles commands
 config.status:1480: executing libtool commands
 

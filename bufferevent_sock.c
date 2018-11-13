@@ -123,7 +123,7 @@ bufferevent_socket_set_conn_address(struct bufferevent_private *bev_p,
 	memcpy(&bev_p->conn_address, addr, addrlen);
 }
 
-// 当bufferevent的写缓冲区output的数据发生变化时，被调用
+// 当bufferevent的写缓冲区output的数据发生变化时，被调用，把写event加入到base中
 static void
 bufferevent_socket_outbuf_cb(struct evbuffer *buf,
     const struct evbuffer_cb_info *cbinfo,
@@ -135,7 +135,7 @@ bufferevent_socket_outbuf_cb(struct evbuffer *buf,
 
     if (cbinfo->n_added &&  // evbuffer添加了数据
         (bufev->enabled & EV_WRITE) && // 默认情况下是enable EV_WRITE的
-        !event_pending(&bufev->ev_write, EV_WRITE, NULL) && //这个event已经被踢出event_base了
+        !event_pending(&bufev->ev_write, EV_WRITE, NULL) && // 这个event已经被踢出event_base了
         !bufev_p->write_suspended) { // 这个bufferevent的写并没有被挂起
 		/* Somebody added data to the buffer, and we would like to
 		 * write, and we were not writing.  So, start writing. */
@@ -146,6 +146,7 @@ bufferevent_socket_outbuf_cb(struct evbuffer *buf,
 	}
 }
 
+// 在bufferevent_socket_new()中被设置,
 // bufferevent的读回调函数，从socket中读取数据，再调用用户自己的回调函数
 static void
 bufferevent_readcb(evutil_socket_t fd, short event, void *arg)
@@ -243,7 +244,7 @@ bufferevent_readcb(evutil_socket_t fd, short event, void *arg)
 	bufferevent_decref_and_unlock_(bufev);
 }
 
-// bufferevent可写的回调函数
+// 在bufferevent_socket_new()中被设置, bufferevent 可写的回调函数
 static void
 bufferevent_writecb(evutil_socket_t fd, short event, void *arg)
 {
@@ -264,7 +265,7 @@ bufferevent_writecb(evutil_socket_t fd, short event, void *arg)
 		what |= BEV_EVENT_TIMEOUT;
 		goto error;
 	}
-    // 判断这个socket是否已经连接上服务器了
+    // 判断这个socket是否正在连接服务器
     // 由于是非阻塞的，因此判断成功连接上了的一个方法是判断这个sockfd是否可写
 	if (bufev_p->connecting) {
         // c等于1，说明已经连接成功
@@ -323,7 +324,7 @@ bufferevent_writecb(evutil_socket_t fd, short event, void *arg)
 	if (evbuffer_get_length(bufev->output)) {
         // 解冻链表头
 		evbuffer_unfreeze(bufev->output, 1);
-        // 将output这个evbuffer的数据写到socket fd 的缓冲区中
+        // 将output这个evbuffer的数据写到sockfd 的缓冲区中，
         // 会把已经写到socket fd缓冲区的数据，从evbuffer中删除
 		res = evbuffer_write_atmost(bufev->output, fd, atmost);
 		evbuffer_freeze(bufev->output, 1);
@@ -380,6 +381,8 @@ bufferevent_writecb(evutil_socket_t fd, short event, void *arg)
 }
 
 // 创建用于socket的bufferevent
+// fd: 是一个可选的表示套接字的文件描述符。如果想以后设置文件描述符,可以设置fd为-1.
+// options: 表示 bufferevent 选项(如 BEV_OPT_CLOSE_ON_FREE 等) 的位掩码.
 struct bufferevent *
 bufferevent_socket_new(struct event_base *base, evutil_socket_t fd,
     int options)
@@ -402,16 +405,16 @@ bufferevent_socket_new(struct event_base *base, evutil_socket_t fd,
 		return NULL;
 	}
 	bufev = &bufev_p->bev;
-    // 设置标志位将evbuffer的数据向fd传
+    // 设置标志位将output evbuffer的数据向fd传
 	evbuffer_set_flags(bufev->output, EVBUFFER_FLAG_DRAINS_TO_FD);
 
-    // 将fd与event相关联，设置读写回调函数
+    // 将sockfd与event相关联，并设置bufferevent缓冲的读写回调函数
 	event_assign(&bufev->ev_read, bufev->ev_base, fd,
 	    EV_READ|EV_PERSIST|EV_FINALIZE, bufferevent_readcb, bufev);
 	event_assign(&bufev->ev_write, bufev->ev_base, fd,
 	    EV_WRITE|EV_PERSIST|EV_FINALIZE, bufferevent_writecb, bufev);
 
-    // 设置evbuffer的回调函数，使得外界给写缓冲区添加数据时，能触发
+    // 设置output evbuffer的回调函数，使得外界给写缓冲区添加数据时，能触发
     // 写操作，这个回调对于写事件的监听是很重要的
 	evbuffer_add_cb(bufev->output, bufferevent_socket_outbuf_cb, bufev);
 
@@ -426,7 +429,7 @@ bufferevent_socket_new(struct event_base *base, evutil_socket_t fd,
 	return bufev;
 }
 
-// 申请一个非阻塞sockfd，接着就connect sa对应的服务器
+// 申请一个非阻塞sockfd，接着就connect sa地址对应的服务器
 int
 bufferevent_socket_connect(struct bufferevent *bev,
     const struct sockaddr *sa, int socklen)

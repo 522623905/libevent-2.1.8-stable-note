@@ -74,6 +74,28 @@
   </dl>
  */
 
+/*
+* bufferevent提供输入和输出缓冲区，可自动填充和排出。
+* bufferevent的用户不再直接处理I / O，而是从输入读取并写入输出缓冲区
+* 启用读取时，bufferevent将尝试从文件描述符读取其输入缓冲区，并调用读取回调。
+* 当启用写入时，bufferevent将尝试在输出缓冲区具有足够数据时将数据写入其文件描述符，
+* 并在输出缓冲区充分耗尽时调用写入回调
+*
+* 基于套接字的bufferevents:
+*    将数据读写到网络套接字上的bufferevent。使用bufferevent_socket_new（）
+*
+* 配对bufferevents:
+*    一对在不触及网络的情况下相互发送和接收数据的bufferevents。使用bufferevent_pair_new（）创建
+*
+* 过滤bufferevents:
+*     一种转换数据，并通过另一个底层bufferevent发送或接收数据的bufferevent。使用bufferevent_filter_new（）创建
+*
+* SSL支持的bufferevents:
+*     使用openssl库通过加密连接发送和接收数据的bufferevent。使用bufferevent_openssl_socket_new（）
+* 或bufferevent_openssl_filter_new（）创建
+*/
+
+
 #include <event2/visibility.h>
 
 #ifdef __cplusplus
@@ -97,9 +119,9 @@ extern "C" {
 
     @{
 */
-// 读取操作时发生某事件,如超时,具体是哪种事件请看其他标志
+// 读取操作时发生某事件,具体是哪种事件请看其他标志
 #define BEV_EVENT_READING	0x01	/**< error encountered while reading */
-// 写入操作时发生某事件,如超时,具体是哪种事件请看其他标志
+// 写入操作时发生某事件,具体是哪种事件请看其他标志
 #define BEV_EVENT_WRITING	0x02	/**< error encountered while writing */
 // 遇到文件结束指示
 #define BEV_EVENT_EOF		0x10	/**< eof file reached */

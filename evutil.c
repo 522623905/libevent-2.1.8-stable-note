@@ -1357,6 +1357,8 @@ apply_socktype_protocol_hack(struct evutil_addrinfo *ai)
 }
 #endif
 
+// 根据 hints_in 给出的规则,解析指定的 nodename 和 servname ,
+// 建立一个 evutil_addrinfo 结构体链表,将其存储在*res 中
 int
 evutil_getaddrinfo(const char *nodename, const char *servname,
     const struct evutil_addrinfo *hints_in, struct evutil_addrinfo **res)

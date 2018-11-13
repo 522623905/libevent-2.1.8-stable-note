@@ -166,7 +166,13 @@ static const struct evconnlistener_ops evconnlistener_event_ops = {
 
 static void listener_read_cb(evutil_socket_t, short, void *);
 
-// 创建一个监听器
+// 创建一个监听器.
+// base: 所属的event_base对象,
+// evconnlistener_cb: 监听回调函数,
+// ptr: 回调函数的参数,
+// flags: 标志(如 LEV_OPT_REUSEABLE|LEV_OPT_CLOSE_ON_FREE),
+// backlog: 监听的个数,
+// fd: 注意是已经将套接字绑定到要监听的端口的fd
 struct evconnlistener *
 evconnlistener_new(struct event_base *base,
     evconnlistener_cb cb, void *ptr, unsigned flags, int backlog,
@@ -224,14 +230,13 @@ evconnlistener_new(struct event_base *base,
 	return &lev->base;
 }
 
-// 申请一个socket，然后对之进行一些有关非阻塞、重用、保持连接的处理、绑定到特定的IP和端口。
-// 最后把业务逻辑交给evconnlistener_new处理
+// 申请一个socket，然后对之进行一些有关非阻塞、重用、保持连接的处理、绑定到特定的IP和端口
 // base: 所属的event_base对象,
 // evconnlistener_cb: 监听回调函数,
 // ptr: 回调函数的参数,
 // flags: 标志(如 LEV_OPT_REUSEABLE|LEV_OPT_CLOSE_ON_FREE)
 // backlog: 监听的个数,
-// sa: 地址,
+// sa: 要绑定到的地址,
 // socklen: 地址长度
 struct evconnlistener *
 evconnlistener_new_bind(struct event_base *base, evconnlistener_cb cb,
@@ -342,6 +347,7 @@ evconnlistener_disable(struct evconnlistener *lev)
 	return r;
 }
 
+// 启用evconnlistener
 static int
 event_listener_enable(struct evconnlistener *lev)
 {
@@ -351,6 +357,7 @@ event_listener_enable(struct evconnlistener *lev)
 	return event_add(&lev_e->listener, NULL);
 }
 
+// 禁用evconnlistener
 static int
 event_listener_disable(struct evconnlistener *lev)
 {
@@ -359,6 +366,7 @@ event_listener_disable(struct evconnlistener *lev)
 	return event_del(&lev_e->listener);
 }
 
+// 返回监听器关联的套接字
 evutil_socket_t
 evconnlistener_get_fd(struct evconnlistener *lev)
 {
@@ -377,6 +385,7 @@ event_listener_getfd(struct evconnlistener *lev)
 	return event_get_fd(&lev_e->listener);
 }
 
+// 返回监听器关联的event_base
 struct event_base *
 evconnlistener_get_base(struct evconnlistener *lev)
 {
@@ -395,6 +404,7 @@ event_listener_getbase(struct evconnlistener *lev)
 	return event_get_base(&lev_e->listener);
 }
 
+// 调整 evconnlistener 的回调函数
 void
 evconnlistener_set_cb(struct evconnlistener *lev,
     evconnlistener_cb cb, void *arg)
@@ -410,7 +420,7 @@ evconnlistener_set_cb(struct evconnlistener *lev,
 	UNLOCK(lev);
 }
 
-// 设置连接监听器的错误监听函数
+// 设置连接监听器的错误回调函数
 void
 evconnlistener_set_error_cb(struct evconnlistener *lev,
     evconnlistener_errorcb errorcb)
@@ -450,7 +460,7 @@ listener_read_cb(evutil_socket_t fd, short what, void *p)
 			UNLOCK(lev);
 			return;
 		}
-		++lev->refcnt;
+        ++lev->refcnt;
 		cb = lev->cb;
 		user_data = lev->user_data;
 		UNLOCK(lev);

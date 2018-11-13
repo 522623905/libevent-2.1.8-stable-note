@@ -152,6 +152,7 @@ struct evbuffer {
 	ev_uint32_t flags;
 
 	/** Used to implement deferred callbacks. */
+    // 用于延迟回调使用的base
 	struct event_base *cb_queue;
 
 	/** A reference count on this evbuffer.	 When the reference count
@@ -162,6 +163,8 @@ struct evbuffer {
 
 	/** A struct event_callback handle to make all of this buffer's callbacks
 	 * invoked from the event loop. */
+    // evbuffer的延迟回调函数
+    // 可以让 evbuffer 回调不在 evbuffer 被修改时立即运行,而是延迟到某 event_base 的事件循环中执行
 	struct event_callback deferred;
 
 	/** A doubly-linked-list of callback functions */

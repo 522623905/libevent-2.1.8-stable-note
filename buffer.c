@@ -437,6 +437,7 @@ evbuffer_incref_and_lock_(struct evbuffer *buf)
     ++buf->refcnt;
 }
 
+// 可以让 evbuffer 回调不在 evbuffer 被修改时立即运行,而是延迟到某 event_base 的事件循环中执行
 int
 evbuffer_defer_callbacks(struct evbuffer *buffer, struct event_base *base)
 {
@@ -1038,6 +1039,7 @@ evbuffer_add_buffer(struct evbuffer *outbuf, struct evbuffer *inbuf)
         goto done;
     }
 
+    // 把inbuf中的数据加入到outbuf中
     if (out_total_len == 0) {
         /* There might be an empty chain at the start of outbuf; free
          * it. */
@@ -2812,6 +2814,7 @@ evbuffer_write(struct evbuffer *buffer, evutil_socket_t fd)
     return evbuffer_write_atmost(buffer, fd, -1);
 }
 
+// 在缓冲区中搜索字符串的首次出现,返回其指针
 unsigned char *
 evbuffer_find(struct evbuffer *buffer, const unsigned char *what, size_t len)
 {
@@ -3199,6 +3202,9 @@ evbuffer_add_printf(struct evbuffer *buf, const char *fmt, ...)
     return (res);
 }
 
+// 通过引用向 evbuffer 末尾添加一段数据。不会进行复制:evbuffer 只会存储一个到
+// data 处的 datlen 字节的指针。因此,在 evbuffer 使用这个指针期间,必须保持指针是有效的。
+// evbuffer 会在不再需要这部分数据的时候调用用户提供的 cleanupfn 函数
 int
 evbuffer_add_reference(struct evbuffer *outbuf,
                        const void *data, size_t datlen,
@@ -3572,6 +3578,7 @@ err:
     return -1;
 }
 
+// 将文件fd中offset 处开始的 length 字节添加到 output 末尾
 int
 evbuffer_add_file(struct evbuffer *buf, int fd, ev_off_t offset, ev_off_t length)
 {
@@ -3683,6 +3690,7 @@ evbuffer_cb_clear_flags(struct evbuffer *buffer,
     return 0;
 }
 
+// 禁止修改 evbuffer 的开头或者末尾
 int
 evbuffer_freeze(struct evbuffer *buffer, int start)
 {
@@ -3695,6 +3703,7 @@ evbuffer_freeze(struct evbuffer *buffer, int start)
     return 0;
 }
 
+// 允许修改 evbuffer 的开头或者末尾
 int
 evbuffer_unfreeze(struct evbuffer *buffer, int start)
 {
