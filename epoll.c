@@ -150,6 +150,7 @@ epoll_init(struct event_base *base)
 	int epfd = -1;
 	struct epollop *epollop;
 
+    // 创建 epollfd，设置 EPOLL_CLOEXEC
 #ifdef EVENT__HAVE_EPOLL_CREATE1
 	/* First, try the shiny new epoll_create1 interface, if we have it. */
     // epoll已经提供新的创建API，epoll_create1，可以设置创建模式
@@ -188,7 +189,7 @@ epoll_init(struct event_base *base)
 	epollop->nevents = INITIAL_NEVENT;
 
     // 如果libevent工作模式是启用epoll的changelist方式，则后台方法变为epollops_changelist
-    // 默认情况下是不选择的
+    // 使用了changelist可以减少系统调用的次数,默认情况下是不选择的
 	if ((base->flags & EVENT_BASE_FLAG_EPOLL_USE_CHANGELIST) != 0 ||
 	    ((base->flags & EVENT_BASE_FLAG_IGNORE_ENV) == 0 &&
 		evutil_getenv_("EVENT_EPOLL_USE_CHANGELIST") != NULL)) {
@@ -207,10 +208,10 @@ epoll_init(struct event_base *base)
     // 可以获得完美的体验。但是当用户使用新的PRECISE_TIMER模式时，可以使用timerfd获取更细的时间粒度。
     // timerfd是Linux为用户提供的定时器接口，基于文件描述符，通过文件描述符的可读事件进行超时通知，timerfd、
     // eventfd、signalfd配合epoll使用，可以构造出零轮询的程序，但是程序没有处理的事件时，程序是被阻塞的；
-    //  timerfd的精度要比uspleep高
 	if ((base->flags & EVENT_BASE_FLAG_PRECISE_TIMER) &&
 	    base->monotonic_timer.monotonic_clock == CLOCK_MONOTONIC) {
 		int fd;
+        // 创建timerfd后加入到epollfd中监听，当超时到来，timefd会返回可读事件
 		fd = epollop->timerfd = timerfd_create(CLOCK_MONOTONIC, TFD_NONBLOCK|TFD_CLOEXEC);
 		if (epollop->timerfd >= 0) {
 			struct epoll_event epev;
@@ -286,7 +287,7 @@ epoll_op_to_string(int op)
 	ch->close_change,                          \
 	change_to_string(ch->close_change)
 
-// 把event_change记录下的内容实际写入到epool当中
+// 根据 event_change 执行 epoll_ctl
 static int
 epoll_apply_one_change(struct event_base *base,
     struct epollop *epollop,
@@ -296,6 +297,7 @@ epoll_apply_one_change(struct event_base *base,
 	int op, events = 0;
 	int idx;
 
+    // 通过change从表中取出对应要执行的操作
 	idx = EPOLL_OP_TABLE_INDEX(ch);
 	op = epoll_op_table[idx].op;
 	events = epoll_op_table[idx].events;
@@ -305,17 +307,20 @@ epoll_apply_one_change(struct event_base *base,
 		return 0;
 	}
 
+    // 判断是否改变成ET模式
 	if ((ch->read_change|ch->write_change) & EV_CHANGE_ET)
 		events |= EPOLLET;
 
 	memset(&epev, 0, sizeof(epev));
 	epev.data.fd = ch->fd;
 	epev.events = events;
+    // 把对要改变的fd的操作到epoll中
 	if (epoll_ctl(epollop->epfd, op, ch->fd, &epev) == 0) {
 		event_debug((PRINT_CHANGES(op, epev.events, ch, "okay")));
 		return 0;
 	}
 
+    // 对上述epoll_ctl操作失败后的处理
 	switch (op) {
 	case EPOLL_CTL_MOD:
 		if (errno == ENOENT) {
@@ -376,6 +381,7 @@ epoll_apply_one_change(struct event_base *base,
 	return -1;
 }
 
+// 遍历所有变化的列表，执行 epool_ctrl
 static int
 epoll_apply_changes(struct event_base *base)
 {
@@ -395,7 +401,7 @@ epoll_apply_changes(struct event_base *base)
 	return (r);
 }
 
-// 把fd的events类型的事件添加到base中，写入epoll
+// 把fd的events类型的事件写入到epoll
 static int
 epoll_nochangelist_add(struct event_base *base, evutil_socket_t fd,
     short old, short events, void *p)
@@ -418,6 +424,7 @@ epoll_nochangelist_add(struct event_base *base, evutil_socket_t fd,
 	return epoll_apply_one_change(base, base->evbase, &ch);
 }
 
+// 删除fd的events类型的事件
 static int
 epoll_nochangelist_del(struct event_base *base, evutil_socket_t fd,
     short old, short events, void *p)
@@ -468,12 +475,13 @@ epoll_dispatch(struct event_base *base, struct timeval *tv)
 		   calling timerfd_settime when the top timeout changes, or
 		   when we're called with a different timeval.
 		*/
+        // 设置timerfd的时间，超时epoll会返回可读事件
 		if (timerfd_settime(epollop->timerfd, 0, &is, NULL) < 0) {
 			event_warn("timerfd_settime");
 		}
 	} else
 #endif
-    // 如果存在超时事件，则将超时时间转换为毫秒时间
+    // 如果没用timerfd，存在超时事件，则将超时时间转换为毫秒时间,
     // 如果超时时间在合法范围之外，则设置超时时间为永久等待
 	if (tv != NULL) {
 		timeout = evutil_tv_to_msec_(tv);
@@ -484,7 +492,8 @@ epoll_dispatch(struct event_base *base, struct timeval *tv)
 		}
 	}
 
-    // 将event_base中有改变的事件列表都根据事件类型应用到epoll的监听上；重新设置之后，则删除改变
+    // 将event_base中所有要改变的事件列表都根据事件类型应用到epoll的监听上；
+    // 重新设置之后，则删除changelist
 	epoll_apply_changes(base);
 	event_changelist_remove_all_(&base->changelist, base);
 
@@ -534,7 +543,7 @@ epoll_dispatch(struct event_base *base, struct timeval *tv)
 		evmap_io_active_(base, events[i].data.fd, ev | EV_ET);
 	}
 
-    // 如果激活的事件个数等于epoll中事件总数，同时epoll中事件总数小于最大总数，
+    // 如果激活的事件个数等于epoll中监听的事件总数，同时epoll中事件总数小于最大总数，
     // 则需要创建新空间用来存储新事件，方法是每次创建的空间等于原来的2倍
 	if (res == epollop->nevents && epollop->nevents < MAX_NEVENT) {
 		/* We used all of the event space this time.  We should
@@ -552,7 +561,6 @@ epoll_dispatch(struct event_base *base, struct timeval *tv)
 
 	return (0);
 }
-
 
 static void
 epoll_dealloc(struct event_base *base)

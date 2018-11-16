@@ -47,6 +47,16 @@
        reported spuriously.
  */
 
+/*
+ * “更改列表”是在对后端的调度功能的调用之间应该进行的所有fd状态更改的列表。
+ * 有一些原因导致后端想要对此类更改进行排队，而不是立即处理它们。
+ *  1）有时应用程序将在调度调用之间多次添加和删除同一事件。
+ * 立即处理这些更改是不必要的，而且可能很昂贵（特别是如果我们在一个系统上，每次更改事件都会进行一次系统调用）。
+ *  2）如果我们提前了解它们，有时我们可以将同一个fd上的多个更改合并到一个系统调用中。
+ * 例如，epoll可以同时进行添加和删除，但前提是我们在告诉epoll之前已经发现了这两个内容。
+ *  3）有时添加我们立即删除的事件会导致意外后果：在kqueue中，这会导致挂起事件被虚假报告。
+ * /
+
 #include "event2/util.h"
 
 /** Represents a */
@@ -57,6 +67,7 @@ struct event_change {
 	evutil_socket_t fd;
 	/* The events that were enabled on the fd before any of these changes
 	   were made.  May include EV_READ or EV_WRITE. */
+    // 改变之前的事件old_events
 	short old_events;
 
 	/* The changes that we want to make in reading and writing on this fd.

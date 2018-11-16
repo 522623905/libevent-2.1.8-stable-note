@@ -103,7 +103,7 @@ listener_cb(struct evconnlistener *listener, evutil_socket_t fd,
 	struct event_base *base = user_data;
 	struct bufferevent *bev;
 
-    // 基于套接字创建一个缓冲区（套接字接收到数据之后存放在缓冲区中，套接字在发送数据之前先将数据存放在缓冲区中）
+    // 为客户端sockfd创建一个缓冲区, BEV_OPT_CLOSE_ON_FREE 表示当释放 bufferevent 将关闭这个传输端口
 	bev = bufferevent_socket_new(base, fd, BEV_OPT_CLOSE_ON_FREE);
 	if (!bev) {
 		fprintf(stderr, "Error constructing bufferevent!");
@@ -112,13 +112,13 @@ listener_cb(struct evconnlistener *listener, evutil_socket_t fd,
 	}
     // 设置缓存区的回调函数
 	bufferevent_setcb(bev, NULL, conn_writecb, conn_eventcb, NULL);
-    // 启用缓存区的写功能
+    // 启用缓存区的写功能,bufferevent将自动尝试在输出缓冲区具有足够数据时将数据写入其文件描述符
 	bufferevent_enable(bev, EV_WRITE);
     // 禁用缓冲区的读功能
 	bufferevent_disable(bev, EV_READ);
 
     // 缓冲区写给socket
-	bufferevent_write(bev, MESSAGE, strlen(MESSAGE));
+    bufferevent_write(bev, MESSAGE, strlen(MESSAGE));
 }
 
 // 写回调函数
@@ -130,7 +130,7 @@ conn_writecb(struct bufferevent *bev, void *user_data)
     // 判断数据是否已经发送完成
     if (evbuffer_get_length(output) == 0) {
 		printf("flushed answer\n");
-        // 释放缓冲区
+        // 释放缓冲区，因为设置了BEV_OPT_CLOSE_ON_FREE 也会关闭这个socket
 		bufferevent_free(bev);
 	}
 }
@@ -140,10 +140,10 @@ static void
 conn_eventcb(struct bufferevent *bev, short events, void *user_data)
 {
 	if (events & BEV_EVENT_EOF) {
-        // 客户端关闭
+        // 如果是客户端主动关闭
 		printf("Connection closed.\n");
 	} else if (events & BEV_EVENT_ERROR) {
-        // 链接上产生一个错误
+        // 连接上产生一个错误
 		printf("Got an error on the connection: %s\n",
 		    strerror(errno));/*XXX win32*/
 	}

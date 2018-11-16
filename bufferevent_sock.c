@@ -134,12 +134,12 @@ bufferevent_socket_outbuf_cb(struct evbuffer *buf,
 	    EVUTIL_UPCAST(bufev, struct bufferevent_private, bev);
 
     if (cbinfo->n_added &&  // evbuffer添加了数据
-        (bufev->enabled & EV_WRITE) && // 默认情况下是enable EV_WRITE的
+        (bufev->enabled & EV_WRITE) && // bufferevent_socket_new()默认情况下是enable EV_WRITE的
         !event_pending(&bufev->ev_write, EV_WRITE, NULL) && // 这个event已经被踢出event_base了
         !bufev_p->write_suspended) { // 这个bufferevent的写并没有被挂起
 		/* Somebody added data to the buffer, and we would like to
 		 * write, and we were not writing.  So, start writing. */
-        // 把这个event添加到event_base中
+        // 把这个写event添加到event_base中，使得base返回后，能发送数据
 		if (bufferevent_add_event_(&bufev->ev_write, &bufev->timeout_write) == -1) {
 		    /* Should we log this? */
 		}
@@ -245,6 +245,7 @@ bufferevent_readcb(evutil_socket_t fd, short event, void *arg)
 }
 
 // 在bufferevent_socket_new()中被设置, bufferevent 可写的回调函数
+// 非阻塞connect处理；把buffer数据发往sockfd
 static void
 bufferevent_writecb(evutil_socket_t fd, short event, void *arg)
 {
@@ -372,7 +373,7 @@ bufferevent_writecb(evutil_socket_t fd, short event, void *arg)
 	goto done;
 
  error:
-    // 有错误。把这个写event删除
+    // 有错误,则把这个写event删除
 	bufferevent_disable(bufev, EV_WRITE);
 	bufferevent_run_eventcb_(bufev, what, 0);
 
@@ -414,8 +415,8 @@ bufferevent_socket_new(struct event_base *base, evutil_socket_t fd,
 	event_assign(&bufev->ev_write, bufev->ev_base, fd,
 	    EV_WRITE|EV_PERSIST|EV_FINALIZE, bufferevent_writecb, bufev);
 
-    // 设置output evbuffer的回调函数，使得外界给写缓冲区添加数据时，能触发
-    // 写操作，这个回调对于写事件的监听是很重要的
+    // 设置output evbuffer的回调函数，使得外界给写缓冲区添加数据时，
+    // 能自动触发把数据写到sockfd中，这个回调对于写事件的监听是很重要的
 	evbuffer_add_cb(bufev->output, bufferevent_socket_outbuf_cb, bufev);
 
     // 冻结读缓冲区的尾部，未解冻之前不能往读缓冲区追加数据

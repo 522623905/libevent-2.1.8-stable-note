@@ -399,6 +399,8 @@ struct evbuffer *
 
     LIST_INIT(&buffer->callbacks);
     buffer->refcnt = 1;
+    // 此时first为NULL。所以当链表没有节点时*last_with_datap为NULL
+    // 当只有一个节点时*last_with_datap就是first
     buffer->last_with_datap = &buffer->first;
 
     return (buffer);
@@ -556,7 +558,10 @@ evbuffer_run_callbacks(struct evbuffer *buffer, int running_deferred)
     }
 }
 
-// 调用evbuffer的回调函数
+// 调用evbuffer设置的回调函数
+// 比如，如果是socket类型的bufferevent，则会在初始化创建时，
+// evbuffer_add_cb(bufev->output, bufferevent_socket_outbuf_cb, bufev);
+// 使得外界给写缓冲区添加数据时，能自动触发把数据写到sockfd中，这个回调对于写事件的监听是很重要的
 void
 evbuffer_invoke_callbacks_(struct evbuffer *buffer)
 {
@@ -606,6 +611,7 @@ evbuffer_remove_all_callbacks(struct evbuffer *buffer)
     }
 }
 
+// 真正的释放evbuffer和其内容
 void
 evbuffer_decref_and_unlock_(struct evbuffer *buffer)
 {
@@ -614,6 +620,7 @@ evbuffer_decref_and_unlock_(struct evbuffer *buffer)
 
     EVUTIL_ASSERT(buffer->refcnt > 0);
 
+    // 引用计数若没减到0，则直接返回，不会释放资源
     if (--buffer->refcnt > 0) {
         EVBUFFER_UNLOCK(buffer);
         return;
@@ -697,7 +704,7 @@ evbuffer_add_iovec(struct evbuffer * buf, struct evbuffer_iovec * vec, int n_vec
         to_alloc += vec[n].iov_len;
     }
 
-    if (_fast_(buf, to_alloc, 2) < 0) {
+    if (evbuffer_expand_fast_(buf, to_alloc, 2) < 0) {
         goto done;
     }
 
@@ -1828,6 +1835,7 @@ done:
 // 1. 该链表为空，即这是第一次插入数据。这是最简单的，直接把新建的evbuffer_chain插入到链表中，通过调用evbuffer_chain_insert。
 // 2. 链表的最后一个节点(即evbuffer_chain)还有一些空余的空间，放得下本次要插入的数据。此时直接把数据追加到最后一个节点即可。
 // 3. 链表的最后一个节点并不能放得下本次要插入的数据，那么就需要把本次要插入的数据分开由两个evbuffer_chain存放
+// 成功时返回0,失败时返回-1
 int
 evbuffer_add(struct evbuffer *buf, const void *data_in, size_t datlen)
 {
@@ -1865,8 +1873,7 @@ evbuffer_add(struct evbuffer *buf, const void *data_in, size_t datlen)
         evbuffer_chain_insert(buf, chain);
     }
 
-    // EVBUFFER_IMMUTABLE 是 read-only chain
-    // 等于0说明是可以写的
+    // EVBUFFER_IMMUTABLE 是 read-only chain,等于0说明是可以写的
     if ((chain->flags & EVBUFFER_IMMUTABLE) == 0) {
         /* Always true for mutable buffers */
         EVUTIL_ASSERT(chain->misalign >= 0 &&

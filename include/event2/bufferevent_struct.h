@@ -135,6 +135,7 @@ struct bufferevent {
 
 	/** Events that are currently enabled: currently EV_READ and EV_WRITE
 	    are supported. */
+    // EV_READ 、EV_WRITE(默认）
 	short enabled;
 };
 

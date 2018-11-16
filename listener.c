@@ -80,7 +80,7 @@ struct evconnlistener {
 	void *lock;
     // 用户的回调函数
 	evconnlistener_cb cb;
-    // 发生错误时的回调函数
+    // 发生accept错误时的回调函数
 	evconnlistener_errorcb errorcb;
     // 回调函数的参数
 	void *user_data;
@@ -92,6 +92,7 @@ struct evconnlistener {
 	unsigned enabled : 1;
 };
 
+// 监听器的event
 struct evconnlistener_event {
 	struct evconnlistener base;
     // 内部event,插入到event_base
@@ -168,8 +169,8 @@ static void listener_read_cb(evutil_socket_t, short, void *);
 
 // 创建一个监听器.
 // base: 所属的event_base对象,
-// evconnlistener_cb: 监听回调函数,
-// ptr: 回调函数的参数,
+// evconnlistener_cb: 新连接到达时的回调,如果 cb 为 NULL,则监听器是禁用的,直到设置了回调函数为止
+// ptr: 传递给回调函数的参数,
 // flags: 标志(如 LEV_OPT_REUSEABLE|LEV_OPT_CLOSE_ON_FREE),
 // backlog: 监听的个数,
 // fd: 注意是已经将套接字绑定到要监听的端口的fd
@@ -219,7 +220,7 @@ evconnlistener_new(struct event_base *base,
 		EVTHREAD_ALLOC_LOCK(lev->base.lock, EVTHREAD_LOCKTYPE_RECURSIVE);
 	}
 
-    // 在多路IO复用函数中，新客户端的连接请求也被当作读事件
+    // 赋值listener event，新客户端的连接请求也被当作读事件，回调实际为 accept 后调用用户设置的回调
 	event_assign(&lev->listener, base, fd, EV_READ|EV_PERSIST,
 	    listener_read_cb, lev);
 
@@ -336,6 +337,7 @@ evconnlistener_enable(struct evconnlistener *lev)
 	return r;
 }
 
+// 禁止监听新连接，实际执行event_del
 int
 evconnlistener_disable(struct evconnlistener *lev)
 {
@@ -420,7 +422,7 @@ evconnlistener_set_cb(struct evconnlistener *lev,
 	UNLOCK(lev);
 }
 
-// 设置连接监听器的错误回调函数
+// 设置连接监听器accept()调用失败时的错误回调函数
 void
 evconnlistener_set_error_cb(struct evconnlistener *lev,
     evconnlistener_errorcb errorcb)

@@ -185,6 +185,7 @@ struct event_signal_map {
 	/* An array of evmap_io * or of evmap_signal *; empty entries are
 	 * set to NULL. */
     // 二级指针，元素是evmap_signal*数组，而evmap_signal是一个event的队列
+    // 如： entries[fd]: 存储的是fd对应的一系列事件
     void **entries;
 	/* The number of entries available in entries */
     // 元素个数
@@ -223,6 +224,7 @@ struct event_change;
 // 只有在后台使用改变集合时才会维护这个列表，否则不维护？
 struct event_changelist {
 	struct event_change *changes;
+    // changes 的总个数
 	int n_changes;
 	int changes_size;
 };

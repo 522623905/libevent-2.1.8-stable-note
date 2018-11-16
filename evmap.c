@@ -831,6 +831,7 @@ event_changelist_assert_ok(struct event_base *base)
 #define event_changelist_check(base)  ((void)0)
 #endif
 
+// 删除所有的 changelist
 void
 event_changelist_remove_all_(struct event_changelist *changelist,
     struct event_base *base)

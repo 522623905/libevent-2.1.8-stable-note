@@ -121,6 +121,7 @@
   Bit 8: old events had EV_CLOSED
 */
 
+// 通过记录的event_change，从表中提取出epoll_op_table[]索引
 #define EPOLL_OP_TABLE_INDEX(c) \
 	(   (((c)->close_change&(EV_CHANGE_ADD|EV_CHANGE_DEL))) |		\
 	    (((c)->read_change&(EV_CHANGE_ADD|EV_CHANGE_DEL)) << 2) |	\

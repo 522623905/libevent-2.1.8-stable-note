@@ -37,6 +37,11 @@
  * SUCH DAMAGE.
  */
 
+/*
+* libevent 可以记录内部错误和警告。如果编译进日志支持,还会记录调试信息。
+* 默认配置下这些信息被写到stderr。通过提供定制的日志函数可以覆盖默认行为。
+*/
+
 #include "event2/event-config.h"
 #include "evconfig-private.h"
 

@@ -634,6 +634,7 @@ enum bufferevent_flush_mode {
 	BEV_FLUSH = 1,
 
     /** encountered EOF on read or done sending data */
+    // 告知另一端,没有更多数据需要发送了
 	BEV_FINISHED = 2
 };
 

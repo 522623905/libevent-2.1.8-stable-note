@@ -83,7 +83,9 @@ struct evbuffer_cb_entry {
 
 struct bufferevent;
 struct evbuffer_chain;
-// Libevent将网络 IO 的缓冲数据都存放到evbuffer中。
+// Libevent将网络 IO 的缓冲数据都存放到evbuffer中,
+// 它不提供调度 IO 或者当 IO 就绪时触发 IO 的 功能:这是 bufferevent 的工作
+// 实现了为向后面添加数据和从前面移除数据而优化的字节队列。
 // 通过一个个的evbuffer_chain连成的链表可以存放很多的缓冲数据
 struct evbuffer {
 	/** The first chain in this buffer's linked list of chains. */

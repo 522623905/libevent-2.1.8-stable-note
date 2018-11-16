@@ -461,7 +461,7 @@ bufferevent_write_buffer(struct bufferevent *bufev, struct evbuffer *buf)
 }
 
 // 至多从输入缓冲区移除size字节的数据,将其存储到内存中data处
-// 返 回 实 际 移 除 的 字 节 数
+// 返回实际移除的字节数
 size_t
 bufferevent_read(struct bufferevent *bufev, void *data, size_t size)
 {
@@ -575,6 +575,7 @@ bufferevent_disable_hard_(struct bufferevent *bufev, short event)
 	return r;
 }
 
+// 禁用 bufferevent 上的 event 类型的事件
 int
 bufferevent_disable(struct bufferevent *bufev, short event)
 {
@@ -593,7 +594,7 @@ bufferevent_disable(struct bufferevent *bufev, short event)
 /*
  * Sets the water marks
  */
-/*   设置bufferevent事件(读或写)的低、高水位标志
+/*   设置bufferevent事件(读或写)的低、高水位标志,对于高水位,0表示“无限”
  *   读取低水位:读取操作使得输入缓冲区的数据量在此级别或者更高时,读取回调将被调用,
  *       默认值为0,所以每个读取操作都会导致读取回调被调用.
  *   读取高水位:输入缓冲区中的数据量达到此级别后, bufferevent 将停止读取,直到输
@@ -684,7 +685,7 @@ bufferevent_getwatermark(struct bufferevent *bufev, short events,
 
 // 清空 bufferevent,要求 bufferevent 强制从底层传输端口读取或者写入尽可能多的数据
 // iotype: EV_READ、 EV_WRITE 或者 EV_READ | EV_WRITE
-// state: BEV_NORMAL、BEV_FLUSH 或者 BEV_FINISHED
+// mode: BEV_NORMAL、BEV_FLUSH 或者 BEV_FINISHED
 // 套接字的 bufferevent 没有实现该功能？？
 int
 bufferevent_flush(struct bufferevent *bufev,
@@ -829,6 +830,11 @@ bufferevent_decref(struct bufferevent *bufev)
 	return bufferevent_decref_and_unlock_(bufev);
 }
 
+// 释放bufferevent
+// bufferevent 内部具有引用计数,所以,如果释放时还有未
+// 决的延迟回调,则在回调完成之前 bufferevent 不会被删除。
+// 如果设置了 BEV_OPT_CLOSE_ON_FREE 标志,并且 bufferevent 有一个套接字或
+// 者底层 bufferevent 作为其传输端口,则释放 bufferevent 将关闭这个传输端口。
 void
 bufferevent_free(struct bufferevent *bufev)
 {

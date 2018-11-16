@@ -55,6 +55,7 @@ typedef void (*evconnlistener_cb)(struct evconnlistener *, evutil_socket_t, stru
    @param listener The evconnlistener
    @param user_arg the pointer passed to evconnlistener_new()
  */
+// 连接监听器accept()调用失败时的错误回调函数
 typedef void (*evconnlistener_errorcb)(struct evconnlistener *, void *);
 
 /** Flag: Indicates that we should not make incoming sockets nonblocking
@@ -63,7 +64,7 @@ typedef void (*evconnlistener_errorcb)(struct evconnlistener *, void *);
 #define LEV_OPT_LEAVE_SOCKETS_BLOCKING	(1u<<0)
 /** Flag: Indicates that freeing the listener should close the underlying
  * socket. */
-// 表明，当释放连接监听器时会关闭底层套接字
+// 表明当释放连接监听器时会关闭底层套接字
 #define LEV_OPT_CLOSE_ON_FREE		(1u<<1)
 /** Flag: Indicates that we should set the close-on-exec flag, if possible */
 // 连接监听器会为底层套接字设置 close-on-exec 标志
