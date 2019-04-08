@@ -23,6 +23,9 @@
  * (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF
  * THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  */
+
+// 维护句柄（文件描述符或信号）与事件处理器的映射关系
+
 #include "event2/event-config.h"
 #include "evconfig-private.h"
 
@@ -55,6 +58,7 @@
 /** An entry for an evmap_io list: notes all the events that want to read or
 	write on a given fd, and the number of each.
   */
+// io事件队列
 struct evmap_io {
 	struct event_dlist events;
 	ev_uint16_t nread;
@@ -64,6 +68,7 @@ struct evmap_io {
 
 /* An entry for an evmap_signal list: notes all the events that want to know
    when a signal triggers. */
+// 信号事件队列
 struct evmap_signal {
 	struct event_dlist events;
 };
@@ -158,6 +163,7 @@ void evmap_io_clear_(struct event_io_map *ctx)
 /* Set the variable 'x' to the field in event_map 'map' with fields of type
    'struct type *' corresponding to the fd or signal 'slot'.  Set 'x' to NULL
    if there are no entries for 'slot'.  Does no bounds-checking. */
+// 根据文件描述符获取该fd上注册的所有事件列表
 #define GET_SIGNAL_SLOT(x, map, slot, type)			\
 	(x) = (struct type *)((map)->entries[slot])
 /* As GET_SLOT, but construct the entry for 'slot' if it is not present,
@@ -191,6 +197,7 @@ evmap_io_initmap_(struct event_io_map* ctx)
 {
 	evmap_signal_initmap_(ctx);
 }
+// 清除映射，释放空间
 void
 evmap_io_clear_(struct event_io_map* ctx)
 {
@@ -204,7 +211,7 @@ evmap_io_clear_(struct event_io_map* ctx)
  */
 // slot是信号值sig，或者文件描述符fd.
 // 当sig或者fd >= map的nentries变量时就会调用此函数
-// msize 等于 sizeof(struct evmap_signal *)
+// msize 等于 sizeof(struct evmap_signal * 或者 struct evmap_io *)
 // event_signal_map要求的数组长度一定要大于slot。
 // 那么之后给定一个sig或者fd，就可以直接通过下标操作快速定位了。
 // 这是因为一个sig或者fd就对应在数组中占有一个位置，并且sig或者fd的值等于其在数组位置的下标值
@@ -212,11 +219,12 @@ static int
 evmap_make_space(struct event_signal_map *map, int slot, int msize)
 {
 	if (map->nentries <= slot) {
-        // posix标准中，信号的种类就只有32种
+        // posix标准中，信号的种类就只有32种,
+        // 当slot是一个文件描述符时，就会大于32
 		int nentries = map->nentries ? map->nentries : 32;
 		void **tmp;
 
-        // 当slot是一个文件描述符时，就会大于32
+        // 一次扩大2倍，均是32的倍数
 		while (nentries <= slot)
 			nentries <<= 1;
 
@@ -224,10 +232,11 @@ evmap_make_space(struct event_signal_map *map, int slot, int msize)
 		if (tmp == NULL)
 			return (-1);
 
-        // 清零是很有必要的。因为tmp是二级指针，数组里面的元素是一个指针
+        // 新增的空间，全部清0
 		memset(&tmp[map->nentries], 0,
 		    (nentries - map->nentries) * msize);
 
+        // 更新状态
 		map->nentries = nentries;
 		map->entries = tmp;
 	}
@@ -243,6 +252,7 @@ evmap_signal_initmap_(struct event_signal_map *ctx)
 	ctx->entries = NULL;
 }
 
+// 清除映射，释放空间
 void
 evmap_signal_clear_(struct event_signal_map *ctx)
 {
@@ -274,7 +284,7 @@ evmap_io_init(struct evmap_io *entry)
 
 /* return -1 on error, 0 on success if nothing changed in the event backend,
  * and 1 on success if something did. */
-// 将事件和文件描述符映射
+// 将事件和文件描述符映射，插入到IO事件队列中
 // 同一个文件描述符上可能会注册多个IO事件，因此base内部维护一个文件描述符和事件之间的映射表
 int
 evmap_io_add_(struct event_base *base, evutil_socket_t fd, struct event *ev)
@@ -283,6 +293,7 @@ evmap_io_add_(struct event_base *base, evutil_socket_t fd, struct event *ev)
 	const struct eventop *evsel = base->evsel;
     // IO事件和文件描述符的映射
 	struct event_io_map *io = &base->io;
+    // fd参数对应的IO事件队列
 	struct evmap_io *ctx = NULL;
 	int nread, nwrite, nclose, retval = 0;
 	short res = 0, old = 0;
@@ -304,17 +315,17 @@ evmap_io_add_(struct event_base *base, evutil_socket_t fd, struct event *ev)
 			return (-1);
 	}
 #endif
-    // 获取IO映射的槽以及存储的环境变量
-    // 其实就是根据fd，从evmap_io中获取该fd上注册的事件集合，因为同一个fd上可以注册多个事件
+    // 获取IO映射的槽以及存储的ctx
+    // 其实就是根据fd，从evmap_io中获取该fd上注册的事件队列，因为同一个fd上可以注册多个事件
 	GET_IO_SLOT_AND_CTOR(ctx, io, fd, evmap_io, evmap_io_init,
 						 evsel->fdinfo_len);
 
-    // 获取原有事件的读事件个数、写事件个数、关闭事件个数
+    // 获取原有事件的读、写、关闭事件个数
 	nread = ctx->nread;
 	nwrite = ctx->nwrite;
 	nclose = ctx->nclose;
 
-    // old变量用来存储原有事件类型
+    // old变量用来存储原有事件类型,
     // 如果读、写、关闭事件个数不为0，则具有该事件类型
 	if (nread)
 		old |= EV_READ;
@@ -368,7 +379,7 @@ evmap_io_add_(struct event_base *base, evutil_socket_t fd, struct event *ev)
 	ctx->nread = (ev_uint16_t) nread;
 	ctx->nwrite = (ev_uint16_t) nwrite;
 	ctx->nclose = (ev_uint16_t) nclose;
-    // 将事件插入到环境变量的队列中，从头部插入
+    // 将事件从头部插入到对应的IO事件队列
 	LIST_INSERT_HEAD(&ctx->events, ev, ev_io_next);
 
 	return (retval);
@@ -396,7 +407,7 @@ evmap_io_del_(struct event_base *base, evutil_socket_t fd, struct event *ev)
 		return (-1);
 #endif
 
-    // 根据fd获取相关事件的ctx
+    // 根据fd获取对应的IO事件队列
 	GET_IO_SLOT(ctx, io, fd, evmap_io);
 
     // 获取当前fd上注册的读、写、关闭事件个数
@@ -448,7 +459,8 @@ evmap_io_del_(struct event_base *base, evutil_socket_t fd, struct event *ev)
 	return (retval);
 }
 
-// 根据fd和事件类型之间的映射表，找出所有该类型事件，全部激活，将注册到指定fd上的特定事件类型的事件插入激活队列中
+// 获取fd注册的所有事件列表,找出所有事件类型为 events 的，全部激活，
+// 即将注册到指定fd上的特定事件类型的事件插入激活队列中
 void
 evmap_io_active_(struct event_base *base, evutil_socket_t fd, short events)
 {
@@ -520,7 +532,7 @@ evmap_signal_add_(struct event_base *base, int sig, struct event *ev)
 	return (1);
 }
 
-// 从信号事件与信号的映射表中删除事件
+// 从信号的事件映射表中删除事件
 int
 evmap_signal_del_(struct event_base *base, int sig, struct event *ev)
 {
@@ -531,13 +543,13 @@ evmap_signal_del_(struct event_base *base, int sig, struct event *ev)
 	if (sig >= map->nentries)
 		return (-1);
 
-    // // 根据sig获取相关ctx
+    // 根据sig获取相关ctx
 	GET_SIGNAL_SLOT(ctx, map, sig, evmap_signal);
 
     // 删除事件
 	LIST_REMOVE(ev, ev_signal_next);
 
-    // 如果信号上注册的事件为空，则需要从信号的后台处理方法上删除
+    // 如果信号上注册的事件为空，则表示不再对该信号进行处理，则需要从后台处理方法上删除,
     // 实际上调用的是evsig_del函数，这是在evsig_init函数中指定的
 	if (LIST_FIRST(&ctx->events) == NULL) {
 		if (evsel->del(base, ev->ev_fd, 0, EV_SIGNAL, NULL) == -1)
@@ -597,6 +609,7 @@ typedef int (*evmap_io_foreach_fd_cb)(
  * Note that there is no guarantee that the file descriptors will be processed
  * in any particular order.
  */
+// 对 base 中的每个 fd ，调用 fn 函数
 static int
 evmap_io_foreach_fd(struct event_base *base,
     evmap_io_foreach_fd_cb fn,
@@ -636,6 +649,7 @@ typedef int (*evmap_signal_foreach_signal_cb)(
  * If fn returns 0, continue on to the next signal. Otherwise, return the same
  * value that fn returned.
  */
+// 对 base 中的每个 sigfd ，调用 fn 函数
 static int
 evmap_signal_foreach_signal(struct event_base *base,
     evmap_signal_foreach_signal_cb fn,

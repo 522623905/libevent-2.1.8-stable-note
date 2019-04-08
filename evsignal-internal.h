@@ -36,7 +36,9 @@ typedef void (*ev_sighandler_t)(int);
 
 /* Data structure for the default signal-handling implementation in signal.c
  */
-// 存储信号处理的信息
+// 信号事件处理时使用的数据结构，存储信号处理的信息.
+// 封装了一个由socketpair创建的管道，用于信号处理函数和事件多路分发器dispatch
+// 之间的通信.
 struct evsig_info {
 	/* Event watching ev_signal_pair[1] */
     // 监听ev_signal_pair[1]的事件，即内部信号管道监听事件
@@ -59,7 +61,7 @@ struct evsig_info {
     // 此时，就要保存用户之前设置的信号捕抓函数。当用户不要
     // 监听这个信号时，就能够恢复用户之前的捕抓函数。
     // 因为是有多个信号，所以得用一个数组保存。
-    // 数组的一个元素就存放一个信号的handler。信号值等于其下标
+    // 数组的一个元素就存放一个信号的handler,信号值等于其下标
 	struct sigaction **sh_old;
 #else
     // 保存的是捕抓函数的函数指针，又因为是数组。所以是二级指针

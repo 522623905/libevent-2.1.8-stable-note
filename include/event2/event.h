@@ -969,7 +969,7 @@ int event_base_got_break(struct event_base *);
  * When a persistent event with a timeout becomes activated, its timeout
  * is reset to 0.
  */
-// 永久事件，激活执行后会重新加到队列中等待下一次激活，否则激活执行后会自动移除
+// 永久事件，激活执行后会重新加到队列中(重新调用event_add函数)，否则激活执行后会自动移除
 #define EV_PERSIST	0x10
 /** Select edge-triggered behavior, if supported by the backend. */
 // 边沿触发，一般需要后台方法支持

@@ -25,6 +25,9 @@
  * THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  */
 
+// 提供往缓冲区添加标记数据（比如一个整数），以及从缓冲区
+// 中读取标记数据的函数
+
 #include "event2/event-config.h"
 #include "evconfig-private.h"
 

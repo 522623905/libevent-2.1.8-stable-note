@@ -83,6 +83,7 @@ evthread_posix_unlock(unsigned mode, void *lock_)
 	return pthread_mutex_unlock(lock);
 }
 
+// 获取线程 tid
 static unsigned long
 evthread_posix_get_id(void)
 {

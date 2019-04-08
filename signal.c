@@ -26,6 +26,9 @@
  * (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF
  * THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  */
+
+// 提供对信号的支持，针对结构体eventop所定义的接口函数的信号事件具体实现
+
 #include "event2/event-config.h"
 #include "evconfig-private.h"
 

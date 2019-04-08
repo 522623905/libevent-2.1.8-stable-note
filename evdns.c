@@ -48,6 +48,8 @@
  * Version: 0.1b
  */
 
+// 提供了对DNS协议的支持
+
 #include "event2/event-config.h"
 #include "evconfig-private.h"
 

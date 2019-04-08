@@ -32,7 +32,7 @@
  *	@(#)queue.h	8.5 (Berkeley) 8/20/94
  */
 
-// queue.h是libevent基本数据结构的实现，包括链表，双向链表，队列等
+// queue.h是libevent基本数据结构的实现，包括链表，双向链表，队列，尾队列，循环队列
 
 #ifndef	SYS_QUEUE_H__
 #define	SYS_QUEUE_H__

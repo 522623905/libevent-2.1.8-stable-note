@@ -25,6 +25,8 @@
  * THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  */
 
+// 提供了对http协议的支持
+
 #include "event2/event-config.h"
 #include "evconfig-private.h"
 

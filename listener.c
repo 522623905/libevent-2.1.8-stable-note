@@ -24,6 +24,8 @@
  * THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  */
 
+// 封装了对监听socket的操作，包括监听连接，接受连接
+
 #include "event2/event-config.h"
 #include "evconfig-private.h"
 

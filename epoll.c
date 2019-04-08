@@ -525,6 +525,7 @@ epoll_dispatch(struct event_base *base, struct timeval *tv)
 			continue;
 #endif
 
+        // 记录下返回就绪事件的原因
 		if (what & (EPOLLHUP|EPOLLERR)) {
 			ev = EV_READ | EV_WRITE;
 		} else {
@@ -539,7 +540,7 @@ epoll_dispatch(struct event_base *base, struct timeval *tv)
 		if (!ev)
 			continue;
 
-        // 根据事件绑定的fd，事件类型以及触发方式激活事件
+        // 根据事件绑定的fd，事件类型以及触发方式来激活事件,即将事件插入激活队列中
 		evmap_io_active_(base, events[i].data.fd, ev | EV_ET);
 	}
 

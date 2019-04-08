@@ -24,6 +24,8 @@
  * THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  */
 
+// 提供对多线程的支持
+
 #include "event2/event-config.h"
 #include "evconfig-private.h"
 

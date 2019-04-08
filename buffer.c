@@ -164,7 +164,7 @@ static struct evbuffer_chain *
     if (size > EVBUFFER_CHAIN_MAX - EVBUFFER_CHAIN_SIZE)
         return (NULL);
 
-    // 所需的大小size 再 加上evbuffer_chain结构体本身所需
+    // 所需的大小 size 再加上 evbuffer_chain 结构体本身所需
     // 的内存大小。这样做的原因是，evbuffer_chain本身是管理
     // buffer的结构体。但buffer内存就分配在evbuffer_chain结构体存储
     // 内存的后面。所以要申请多一些内存
@@ -175,7 +175,7 @@ static struct evbuffer_chain *
         // 内存块的最小值
         to_alloc = MIN_BUFFER_SIZE;
         while (to_alloc < size) {
-            // 申请的空间大小是512的倍数
+            // 申请的空间大小是1024的倍数
             to_alloc <<= 1;
         }
     } else {
@@ -191,7 +191,7 @@ static struct evbuffer_chain *
     // 只需初始化最前面的结构体部分即可
     memset(chain, 0, EVBUFFER_CHAIN_SIZE);
 
-    // buffer_len存储的是buffer数据的大小
+    // buffer_len存储的是buffer能容纳的数据大小
     chain->buffer_len = to_alloc - EVBUFFER_CHAIN_SIZE;
 
     /* this way we can manipulate the buffer to different addresses,
@@ -211,11 +211,14 @@ static inline void
 evbuffer_chain_free(struct evbuffer_chain *chain)
 {
     EVUTIL_ASSERT(chain->refcnt > 0);
+
+    // 只有引用计数减到0，才会释放
     if (--chain->refcnt > 0) {
         /* chain is still referenced by other chains */
         return;
     }
 
+    // 表示该evbuffer_chain不能被修改
     if (CHAIN_PINNED(chain)) {
         /* will get freed once no longer dangling */
         chain->refcnt++;
@@ -315,7 +318,7 @@ static struct evbuffer_chain **
     while ((*ch) && ((*ch)->off != 0 || CHAIN_PINNED(*ch)))
         ch = &(*ch)->next;
     if (*ch) {
-        // 断言，从这个节点开始，后面的说有节点都是没有数据的
+        // 断言，从这个节点开始，后面的所有节点都是没有数据的
         EVUTIL_ASSERT(evbuffer_chains_all_empty(*ch));
         // 释放从这个节点开始的余下链表节点
         evbuffer_free_all_chains(*ch);

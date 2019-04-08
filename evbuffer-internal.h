@@ -161,6 +161,7 @@ struct evbuffer {
 	 * reaches 0, the buffer is destroyed.	Manipulated with
 	 * evbuffer_incref and evbuffer_decref_and_unlock and
 	 * evbuffer_free. */
+    // 引用计数
 	int refcnt;
 
 	/** A struct event_callback handle to make all of this buffer's callbacks
@@ -175,6 +176,7 @@ struct evbuffer {
 
 	/** The parent bufferevent object this evbuffer belongs to.
 	 * NULL if the evbuffer stands alone. */
+    // 这个 evbuffer 所属的父 bufferevent 对象。如果 evbuffer 独立，则为 NULL
 	struct bufferevent *parent;
 };
 
@@ -197,7 +199,7 @@ struct evbuffer_chain {
 	struct evbuffer_chain *next;
 
 	/** total allocation available in the buffer field. */
-    // buffer的大小
+    // buffer可存储的大小
 	size_t buffer_len;
 
 	/** unused space at the beginning of buffer or an offset into a
