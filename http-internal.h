@@ -36,6 +36,7 @@ struct evhttp_request;
 /* Indicates an unknown request method. */
 #define EVHTTP_REQ_UNKNOWN_ (1<<15)
 
+// http连接的状态
 enum evhttp_connection_state {
 	EVCON_DISCONNECTED,	/**< not currently connected not trying either*/
 	EVCON_CONNECTING,	/**< tries to currently connect */
@@ -51,19 +52,22 @@ enum evhttp_connection_state {
 struct event_base;
 
 /* A client or server connection. */
+// http连接
 struct evhttp_connection {
 	/* we use this tailq only if this connection was created for an http
 	 * server */
 	TAILQ_ENTRY(evhttp_connection) next;
 
-	evutil_socket_t fd;
-	struct bufferevent *bufev;
+	evutil_socket_t fd;	// socket fd
+	struct bufferevent *bufev; // 数据缓冲,在读取或者写入了足够量的数据之后调用用户提供的回调
 
-	struct event retry_ev;		/* for retrying connects */
+	struct event retry_ev;		/* for retrying connects 用于重连的event */
 
+	// 要绑定的IP+port
 	char *bind_address;		/* address to use for binding the src */
 	ev_uint16_t bind_port;		/* local port for binding the src */
 
+	// 要连接的IP+port
 	char *address;			/* address to connect to */
 	ev_uint16_t port;
 
@@ -81,38 +85,47 @@ struct evhttp_connection {
 #define EVHTTP_CON_READING_ERROR	(EVHTTP_CON_AUTOFREE << 1)
 
 	struct timeval timeout;		/* timeout for events */
-	int retry_cnt;			/* retry count */
-	int retry_max;			/* maximum number of retries */
+	int retry_cnt;			/* retry count 重试次数 */ 
+	int retry_max;			/* maximum number of retries 重试最大次数*/
 	struct timeval initial_retry_timeout; /* Timeout for low long to wait
 					       * after first failing attempt
-					       * before retry */
+					       * before retry 初始的重试时间*/
 
-	enum evhttp_connection_state state;
+	enum evhttp_connection_state state; // 连接状态
 
 	/* for server connections, the http server they are connected with */
+	// 对于服务器连接，它们与之连接的http服务器
 	struct evhttp *http_server;
 
+	// 一个链表，存放该连接上的所有请求，每个请求对应evhttp_request
 	TAILQ_HEAD(evcon_requestq, evhttp_request) requests;
 
+	// 回调函数
 	void (*cb)(struct evhttp_connection *, void *);
 	void *cb_arg;
 
+	// 关闭回调
 	void (*closecb)(struct evhttp_connection *, void *);
 	void *closecb_arg;
 
+	// 读延迟回调
 	struct event_callback read_more_deferred_cb;
 
+	// 所属的base
 	struct event_base *base;
 	struct evdns_base *dns_base;
 	int ai_family;
 };
 
 /* A callback for an http server */
+// http server回调函数
 struct evhttp_cb {
 	TAILQ_ENTRY(evhttp_cb) next;
 
-	char *what;
+	// 存放字符串uri，注意这里需要free掉
+	char *what; 
 
+	// uri对应的回调函数
 	void (*cb)(struct evhttp_request *req, void *);
 	void *cbarg;
 };
@@ -121,10 +134,11 @@ struct evhttp_cb {
 TAILQ_HEAD(evconq, evhttp_connection);
 
 /* each bound socket is stored in one of these */
+// 存储每个绑定服务端的套接字
 struct evhttp_bound_socket {
 	TAILQ_ENTRY(evhttp_bound_socket) next;
 
-	struct evconnlistener *listener;
+	struct evconnlistener *listener; // 所属的监听器
 };
 
 /* server alias list item. */
@@ -134,16 +148,20 @@ struct evhttp_server_alias {
 	char *alias; /* the server alias. */
 };
 
+// 可看做http server，绑定到某个特定端口和地址，保存访问该server的连接
 struct evhttp {
 	/* Next vhost, if this is a vhost. */
 	TAILQ_ENTRY(evhttp) next_vhost;
 
 	/* All listeners for this host */
+	// 存储每个绑定的监听套接字
 	TAILQ_HEAD(boundq, evhttp_bound_socket) sockets;
 
+	// 存放用户定义的回调函数链表，如访问uri时要执行的回调函数
 	TAILQ_HEAD(httpcbq, evhttp_cb) callbacks;
 
 	/* All live connections on this host. */
+	// 存放所有连接evhttp_connection的链表
 	struct evconq connections;
 
 	TAILQ_HEAD(vhostsq, evhttp) virtualhosts;
@@ -155,22 +173,26 @@ struct evhttp {
 
 	struct timeval timeout;
 
-	size_t default_max_headers_size;
-	ev_uint64_t default_max_body_size;
+	size_t default_max_headers_size;  // 默认header最大值
+	ev_uint64_t default_max_body_size; // 默认body最大值
 	int flags;
-	const char *default_content_type;
+	const char *default_content_type; // 默认content类型
 
 	/* Bitmask of all HTTP methods that we accept and pass to user
 	 * callbacks. */
-	ev_uint16_t allowed_methods;
+	ev_uint16_t allowed_methods; // http支持的方法
 
 	/* Fallback callback if all the other callbacks for this connection
 	   don't match. */
+	// 通用路由的回调函数(即不匹配其他的uri时，调用的回调函数)
 	void (*gencb)(struct evhttp_request *req, void *);
 	void *gencbarg;
+
+	// http server的buffer event回调函数
 	struct bufferevent* (*bevcb)(struct event_base *, void *);
 	void *bevcbarg;
 
+	// 由该event_base负责管理evhttp
 	struct event_base *base;
 };
 

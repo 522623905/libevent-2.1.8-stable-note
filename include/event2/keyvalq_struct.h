@@ -55,6 +55,7 @@ struct name {					\
  * Key-Value pairs.  Can be used for HTTP headers but also for
  * query argument parsing.
  */
+// 键值对。可用于HTTP header，也可用于查询参数解析
 struct evkeyval {
 	TAILQ_ENTRY(evkeyval) next;
 

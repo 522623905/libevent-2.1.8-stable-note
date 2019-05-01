@@ -222,6 +222,10 @@ strsep(char **s, const char *del)
 }
 #endif
 
+// 替换字符，返回值为替换后的字符长度.
+// 在 HTML 中，某些字符是预留的,
+// 在 HTML 中不能使用小于号（<）和大于号（>）等一些字符，这是因为浏览器会误认为它们是标签,
+// 如果希望正确地显示预留字符，我们必须在 HTML 源代码中使用字符实体.
 static size_t
 html_replace(const char ch, const char **escaped)
 {
@@ -254,7 +258,8 @@ html_replace(const char ch, const char **escaped)
  *
  * The returned string needs to be freed by the caller.
  */
-
+// 替换html某些特殊字符，防止被误判为html标签,
+// 注意，需要自己释放返回后的字符串.
 char *
 evhttp_htmlescape(const char *html)
 {
@@ -265,6 +270,7 @@ evhttp_htmlescape(const char *html)
 	if (html == NULL)
 		return (NULL);
 
+	// 遍历原字符串，计算替换后的字符串长度
 	old_size = strlen(html);
 	for (i = 0; i < old_size; ++i) {
 		const char *replaced = NULL;
@@ -273,11 +279,13 @@ evhttp_htmlescape(const char *html)
 			event_warn("%s: html_replace overflow", __func__);
 			return (NULL);
 		}
-		new_size += replace_size;
+		new_size += replace_size; // 统计替换后的字符串长度
 	}
 
 	if (new_size == EV_SIZE_MAX)
 		return (NULL);
+
+	// 分配堆空间，存储替换后的字符串
 	p = escaped_html = mm_malloc(new_size + 1);
 	if (escaped_html == NULL) {
 		event_warn("%s: malloc(%lu)", __func__,
@@ -359,6 +367,7 @@ evhttp_response_needs_body(struct evhttp_request *req)
  * output buffer.  Sets the evconn's writing-is-done callback, and puts
  * the bufferevent into writing mode.
  */
+// 实际上是设置写回调函数，然后bufferevent开启可写事件
 static void
 evhttp_write_buffer(struct evhttp_connection *evcon,
     void (*cb)(struct evhttp_connection *, void *), void *arg)
@@ -366,19 +375,21 @@ evhttp_write_buffer(struct evhttp_connection *evcon,
 	event_debug(("%s: preparing to write buffer\n", __func__));
 
 	/* Set call back */
+	// 设置回调函数
 	evcon->cb = cb;
 	evcon->cb_arg = arg;
 
 	/* Disable the read callback: we don't actually care about data;
 	 * we only care about close detection.  (We don't disable reading,
 	 * since we *do* want to learn about any close events.) */
+	// 设置bufferevent的写回调、错误处理回调
 	bufferevent_setcb(evcon->bufev,
 	    NULL, /*read*/
 	    evhttp_write_cb,
 	    evhttp_error_cb,
 	    evcon);
 
-	bufferevent_enable(evcon->bufev, EV_WRITE);
+	bufferevent_enable(evcon->bufev, EV_WRITE); // 开启写
 }
 
 static void
@@ -481,6 +492,9 @@ evhttp_is_request_connection_close(struct evhttp_request *req)
 static int
 evhttp_is_connection_keepalive(struct evkeyvalq* headers)
 {
+	// 当使用Keep-Alive模式（又称持久连接、连接重用）时，
+	// Keep-Alive功能使客户端到服 务器端的连接持续有效，当出现对服务器的后继请求时，
+	// Keep-Alive功能避免了建立或者重新建立连接
 	const char *connection = evhttp_find_header(headers, "Connection");
 	return (connection != NULL
 	    && evutil_ascii_strncasecmp(connection, "keep-alive", 10) == 0);
@@ -592,6 +606,8 @@ static enum expect evhttp_have_expect(struct evhttp_request *req, int input)
 /** Generate all headers appropriate for sending the http request in req (or
  * the response, if we're sending a response), and write them to evcon's
  * bufferevent. Also writes all data from req->output_buffer */
+// 生成适合在req中发送http请求的所有头文件（或响应，如果我们发送响应），
+// 并将它们写入evcon的bufferevent。 还会写入req-> output_buffer中的所有数据
 static void
 evhttp_make_header(struct evhttp_connection *evcon, struct evhttp_request *req)
 {
@@ -602,6 +618,7 @@ evhttp_make_header(struct evhttp_connection *evcon, struct evhttp_request *req)
 	 * Depending if this is a HTTP request or response, we might need to
 	 * add some new headers or remove existing headers.
 	 */
+	// 根据判断是HTTP请求或响应，可能需要添加一些新标头或删除现有标头。
 	if (req->kind == EVHTTP_REQUEST) {
 		evhttp_make_header_request(evcon, req);
 	} else {
@@ -788,6 +805,7 @@ evhttp_connection_fail_(struct evhttp_connection *evcon,
 
 /* Bufferevent callback: invoked when any data has been written from an
  * http connection's bufferevent */
+// 内部使用，http connection的bufferevent写回调
 static void
 evhttp_write_cb(struct bufferevent *bufev, void *arg)
 {
@@ -1113,6 +1131,7 @@ evhttp_read_body(struct evhttp_connection *evcon, struct evhttp_request *req)
  * Gets called when more data becomes available
  */
 
+// http connection的bufferevent读回调
 static void
 evhttp_read_cb(struct bufferevent *bufev, void *arg)
 {
@@ -1453,6 +1472,7 @@ evhttp_connection_read_on_write_error(struct evhttp_connection *evcon,
 	evcon->flags |= EVHTTP_CON_READING_ERROR;
 }
 
+// http connection的bufferevent错误处理回调
 static void
 evhttp_error_cb(struct bufferevent *bufev, short what, void *arg)
 {
@@ -1910,8 +1930,10 @@ evhttp_header_is_valid_value(const char *value)
 {
 	const char *p = value;
 
+	// 返回两个字符串中首个相同字符的位置
 	while ((p = strpbrk(p, "\r\n")) != NULL) {
 		/* we really expect only one new line */
+		// 计算字符串 p 中连续有几个字符都属于字符串 \r\n
 		p += strspn(p, "\r\n");
 		/* we expect a space or tab for continuation */
 		if (*p != ' ' && *p != '\t')
@@ -1920,6 +1942,10 @@ evhttp_header_is_valid_value(const char *value)
 	return (1);
 }
 
+// 为已存在的http header头部添加另外的头部
+// (1）headers，为http请求的output_headers，
+// （2）key，为headers的名字，
+// （3）value，为headers的值
 int
 evhttp_add_header(struct evkeyvalq *headers,
     const char *key, const char *value)
@@ -1940,6 +1966,10 @@ evhttp_add_header(struct evkeyvalq *headers,
 	return (evhttp_add_header_internal(headers, key, value));
 }
 
+// 内部使用，为已存在的http header头部添加另外的头部
+// (1）headers，为http请求的output_headers，
+// （2）key，为headers的名字，
+// （3）value，为headers的值
 static int
 evhttp_add_header_internal(struct evkeyvalq *headers,
     const char *key, const char *value)
@@ -2370,6 +2400,7 @@ evhttp_connection_base_bufferevent_new(struct event_base *base, struct evdns_bas
 		}
 	}
 
+	// 设置http connection的bufferevent读、写、错误处理的回调
 	bufferevent_setcb(bev, evhttp_read_cb, evhttp_write_cb, evhttp_error_cb, evcon);
 	evcon->bufev = bev;
 
@@ -2412,6 +2443,9 @@ evhttp_connection_get_server(struct evhttp_connection *evcon)
 	return evcon->http_server;
 }
 
+// 用于创建http请求的连接对象，即当连接对象con_obj得到了一个http request时，会主动解析address，并与之建立连接
+// （1）base，用于处理连接事件，（2）dnsbase，用于解析host names，一般为NULL值，
+// （3）address，需要建立连接的对端ip地址，（4）port，需要建立连接的对端端口号
 struct evhttp_connection *
 evhttp_connection_base_new(struct event_base *base, struct evdns_base *dnsbase,
     const char *address, ev_uint16_t port)
@@ -2602,6 +2636,11 @@ evhttp_connection_connect_(struct evhttp_connection *evcon)
  * this will start the connection.
  */
 
+// 为指定的一个连接创建一个http请求，这个连接属于该http请求对象req，连接失败时，req不再有效，该指针已经被释放了
+// (1）evcon， http连接，
+// （2）req，已经创建好并已配置好的http请求，
+// （3）type，该http请求的类型，EVHTTP_REQ_GET、EVHTTP_REQ_POST等,
+// （4）uri，与该http请求相对应
 int
 evhttp_make_request(struct evhttp_connection *evcon,
     struct evhttp_request *req,
@@ -2717,6 +2756,7 @@ evhttp_start_write_(struct evhttp_connection *evcon)
 	evhttp_write_buffer(evcon, evhttp_write_connectioncb, NULL);
 }
 
+// 作为内部的http的发送完成后的回调函数
 static void
 evhttp_send_done(struct evhttp_connection *evcon, void *arg)
 {
@@ -2783,10 +2823,12 @@ evhttp_send_error(struct evhttp_request *req, int error, const char *reason)
 
 /* Requires that headers and response code are already set up */
 
+// 发送http响应，databuf为body的内容,
+// 实际上是填充内容，然后bufferevent开启可写事件
 static inline void
 evhttp_send(struct evhttp_request *req, struct evbuffer *databuf)
 {
-	struct evhttp_connection *evcon = req->evcon;
+	struct evhttp_connection *evcon = req->evcon; // 获取连接
 
 	if (evcon == NULL) {
 		evhttp_request_free(req);
@@ -2803,18 +2845,20 @@ evhttp_send(struct evhttp_request *req, struct evbuffer *databuf)
 		evbuffer_add_buffer(req->output_buffer, databuf);
 
 	/* Adds headers to the response */
-	evhttp_make_header(evcon, req);
+	evhttp_make_header(evcon, req); // 额外添加一些header
 
-	evhttp_write_buffer(evcon, evhttp_send_done, NULL);
+	evhttp_write_buffer(evcon, evhttp_send_done, NULL); // 实际上是bufferevent开启可写事件
 }
 
+// http server发送应答，状态码，原因，body内容,
+// 实际上是填充内容，然后bufferevent开启可写事件
 void
 evhttp_send_reply(struct evhttp_request *req, int code, const char *reason,
     struct evbuffer *databuf)
 {
-	evhttp_response_code_(req, code, reason);
+	evhttp_response_code_(req, code, reason); // 填充code+reason
 
-	evhttp_send(req, databuf);
+	evhttp_send(req, databuf); // 发送响应
 }
 
 void
@@ -3482,6 +3526,7 @@ evhttp_handle_request(struct evhttp_request *req, void *arg)
 }
 
 /* Listener callback when a connection arrives at a server. */
+// 作为回调函数,accept 一个 socket
 static void
 accept_socket_cb(struct evconnlistener *listener, evutil_socket_t nfd, struct sockaddr *peer_sa, int peer_socklen, void *arg)
 {
@@ -3490,6 +3535,7 @@ accept_socket_cb(struct evconnlistener *listener, evutil_socket_t nfd, struct so
 	evhttp_get_request(http, nfd, peer_sa, peer_socklen);
 }
 
+// 绑定http server到一个指定的ip地址和端口，可重复调用该函数来绑定到同一个地址的不同端口
 int
 evhttp_bind_socket(struct evhttp *http, const char *address, ev_uint16_t port)
 {
@@ -3500,6 +3546,7 @@ evhttp_bind_socket(struct evhttp *http, const char *address, ev_uint16_t port)
 	return (0);
 }
 
+// http server绑定地址和监听端口
 struct evhttp_bound_socket *
 evhttp_bind_socket_with_handle(struct evhttp *http, const char *address, ev_uint16_t port)
 {
@@ -3526,6 +3573,7 @@ evhttp_bind_socket_with_handle(struct evhttp *http, const char *address, ev_uint
 	return (NULL);
 }
 
+// 使http server可以接受来自指定的socket的连接，可重复调用来绑定到不同的socket
 int
 evhttp_accept_socket(struct evhttp *http, evutil_socket_t fd)
 {
@@ -3547,6 +3595,7 @@ evhttp_foreach_bound_socket(struct evhttp *http,
 		function(bound, argument);
 }
 
+// 使http server可以接受来自指定的socket的连接，可重复调用来绑定到不同的socket
 struct evhttp_bound_socket *
 evhttp_accept_socket_with_handle(struct evhttp *http, evutil_socket_t fd)
 {
@@ -3555,6 +3604,7 @@ evhttp_accept_socket_with_handle(struct evhttp *http, evutil_socket_t fd)
 	const int flags =
 	    LEV_OPT_REUSEABLE|LEV_OPT_CLOSE_ON_EXEC|LEV_OPT_CLOSE_ON_FREE;
 
+	// 创建监听器
 	listener = evconnlistener_new(http->base, NULL, NULL,
 	    flags,
 	    0, /* Backlog is '0' because we already said 'listen' */
@@ -3562,7 +3612,8 @@ evhttp_accept_socket_with_handle(struct evhttp *http, evutil_socket_t fd)
 	if (!listener)
 		return (NULL);
 
-	bound = evhttp_bind_listener(http, listener);
+	// 设置http server的监听器
+	bound = evhttp_bind_listener(http, listener); 
 	if (!bound) {
 		evconnlistener_free(listener);
 		return (NULL);
@@ -3570,6 +3621,7 @@ evhttp_accept_socket_with_handle(struct evhttp *http, evutil_socket_t fd)
 	return (bound);
 }
 
+// 设置http server的监听器
 struct evhttp_bound_socket *
 evhttp_bind_listener(struct evhttp *http, struct evconnlistener *listener)
 {
@@ -3582,6 +3634,7 @@ evhttp_bind_listener(struct evhttp *http, struct evconnlistener *listener)
 	bound->listener = listener;
 	TAILQ_INSERT_TAIL(&http->sockets, bound, next);
 
+	// 这里才设置监听器的回调函数
 	evconnlistener_set_cb(listener, accept_socket_cb, http);
 	return bound;
 }
@@ -3606,6 +3659,7 @@ evhttp_del_accept_socket(struct evhttp *http, struct evhttp_bound_socket *bound)
 	mm_free(bound);
 }
 
+// 创建一个htpp server对象
 static struct evhttp*
 evhttp_new_object(void)
 {
@@ -3636,6 +3690,7 @@ evhttp_new_object(void)
 	return (http);
 }
 
+// 创建一个新的HTTP server
 struct evhttp *
 evhttp_new(struct event_base *base)
 {
@@ -3644,7 +3699,7 @@ evhttp_new(struct event_base *base)
 	http = evhttp_new_object();
 	if (http == NULL)
 		return (NULL);
-	http->base = base;
+	http->base = base; // 指定http server所属的base
 
 	return (http);
 }
@@ -3653,6 +3708,7 @@ evhttp_new(struct event_base *base)
  * Start a web server on the specified address and port.
  */
 
+// 创建一个evhttp,绑定到端口和地址
 struct evhttp *
 evhttp_start(const char *address, ev_uint16_t port)
 {
@@ -3785,6 +3841,7 @@ evhttp_remove_server_alias(struct evhttp *http, const char *alias)
 	return -1;
 }
 
+// 为一个http请求设置超时时间
 void
 evhttp_set_timeout(struct evhttp* http, int timeout_in_secs)
 {
@@ -3852,12 +3909,14 @@ evhttp_set_allowed_methods(struct evhttp* http, ev_uint16_t methods)
 	http->allowed_methods = methods;
 }
 
+// 设置客户端访问到路径uri时的回调函数
 int
 evhttp_set_cb(struct evhttp *http, const char *uri,
     void (*cb)(struct evhttp_request *, void *), void *cbarg)
 {
 	struct evhttp_cb *http_cb;
 
+	// 如果路径uri的回调函数设置过，就不能再设置了，直接返回
 	TAILQ_FOREACH(http_cb, &http->callbacks, next) {
 		if (strcmp(http_cb->what, uri) == 0)
 			return (-1);
@@ -3868,6 +3927,7 @@ evhttp_set_cb(struct evhttp *http, const char *uri,
 		return (-2);
 	}
 
+	// 赋值evhttp_cb结构
 	http_cb->what = mm_strdup(uri);
 	if (http_cb->what == NULL) {
 		event_warn("%s: strdup", __func__);
@@ -3877,11 +3937,12 @@ evhttp_set_cb(struct evhttp *http, const char *uri,
 	http_cb->cb = cb;
 	http_cb->cbarg = cbarg;
 
-	TAILQ_INSERT_TAIL(&http->callbacks, http_cb, next);
+	TAILQ_INSERT_TAIL(&http->callbacks, http_cb, next); //插入回调函数列表
 
 	return (0);
 }
 
+// 删除http server的路由为uri的回调函数
 int
 evhttp_del_cb(struct evhttp *http, const char *uri)
 {
@@ -3901,6 +3962,7 @@ evhttp_del_cb(struct evhttp *http, const char *uri)
 	return (0);
 }
 
+// 设置http server的通用路由的回调函数
 void
 evhttp_set_gencb(struct evhttp *http,
     void (*cb)(struct evhttp_request *, void *), void *cbarg)
@@ -3909,6 +3971,7 @@ evhttp_set_gencb(struct evhttp *http,
 	http->gencbarg = cbarg;
 }
 
+// 设置http server的buffer event回调函数
 void
 evhttp_set_bevcb(struct evhttp *http,
     struct bufferevent* (*cb)(struct event_base *, void *), void *cbarg)
@@ -3921,6 +3984,7 @@ evhttp_set_bevcb(struct evhttp *http,
  * Request related functions
  */
 
+// 用于创建一个http请求，该请求的内容未初始化，创建完后需立即填充
 struct evhttp_request *
 evhttp_request_new(void (*cb)(struct evhttp_request *, void *), void *arg)
 {
@@ -4062,6 +4126,7 @@ evhttp_request_set_on_complete_cb(struct evhttp_request *req,
  * Allows for inspection of the request URI
  */
 
+// 获取request中要访问的路径
 const char *
 evhttp_request_get_uri(const struct evhttp_request *req) {
 	if (req->uri == NULL)
@@ -4115,6 +4180,7 @@ evhttp_request_get_host(struct evhttp_request *req)
 	return host;
 }
 
+// 判断request类型
 enum evhttp_cmd_type
 evhttp_request_get_command(const struct evhttp_request *req) {
 	return (req->type);
@@ -4145,6 +4211,7 @@ struct evkeyvalq *evhttp_request_get_output_headers(struct evhttp_request *req)
 }
 
 /** Returns the input buffer */
+// 获取request的body内容
 struct evbuffer *evhttp_request_get_input_buffer(struct evhttp_request *req)
 {
 	return (req->input_buffer);
@@ -4162,6 +4229,7 @@ struct evbuffer *evhttp_request_get_output_buffer(struct evhttp_request *req)
  * The callback is executed once the whole request has been read.
  */
 
+// 根据fd和sa创建一个evhttp_connection,并将它关联到http->base
 static struct evhttp_connection*
 evhttp_get_request_connection(
 	struct evhttp* http,
@@ -4171,6 +4239,7 @@ evhttp_get_request_connection(
 	char *hostname = NULL, *portname = NULL;
 	struct bufferevent* bev = NULL;
 
+	// 解析出host port
 	name_from_addr(sa, salen, &hostname, &portname);
 	if (hostname == NULL || portname == NULL) {
 		if (hostname) mm_free(hostname);
@@ -4185,6 +4254,7 @@ evhttp_get_request_connection(
 	if (http->bevcb != NULL) {
 		bev = (*http->bevcb)(http->base, http->bevcbarg);
 	}
+	// 创建http connection
 	evcon = evhttp_connection_base_bufferevent_new(
 		http->base, NULL, bev, hostname, atoi(portname));
 	mm_free(hostname);
@@ -4244,12 +4314,15 @@ evhttp_associate_new_request_with_connection(struct evhttp_connection *evcon)
 	return (0);
 }
 
+// 封装一个http连接evhttp_connection，并将连接记录至http server.
+// 在回调函数accept_socket中被调用,参数fd是accept()后返回的描述符.
 static void
 evhttp_get_request(struct evhttp *http, evutil_socket_t fd,
     struct sockaddr *sa, ev_socklen_t salen)
 {
 	struct evhttp_connection *evcon;
 
+	// 根据fd和sa创建一个evhttp_connection,并将它关联到http->base
 	evcon = evhttp_get_request_connection(http, fd, sa, salen);
 	if (evcon == NULL) {
 		event_sock_warn(fd, "%s: cannot get connection on "EV_SOCK_FMT,
@@ -4266,7 +4339,9 @@ evhttp_get_request(struct evhttp *http, evutil_socket_t fd,
 	 * if we want to accept more than one request on a connection,
 	 * we need to know which http server it belongs to.
 	 */
+	// 指定evcon所属的http server
 	evcon->http_server = http;
+	// 将evcon插入到&http->connections
 	TAILQ_INSERT_TAIL(&http->connections, evcon, next);
 
 	if (evhttp_associate_new_request_with_connection(evcon) == -1)
@@ -4279,6 +4354,7 @@ evhttp_get_request(struct evhttp *http, evutil_socket_t fd,
  * the world.
  */
 
+// 根据sockaddr解析出host和port
 static void
 name_from_addr(struct sockaddr *sa, ev_socklen_t salen,
     char **phost, char **pport)
@@ -4383,6 +4459,7 @@ make_addrinfo(const char *address, ev_uint16_t port)
 	return (ai);
 }
 
+// 绑定ip+port，返回创建的socket套接字
 static evutil_socket_t
 bind_socket(const char *address, ev_uint16_t port, int reuse)
 {
@@ -4689,6 +4766,7 @@ path_matches_noscheme(const char *cp)
 	return 1;
 }
 
+// 解析uri
 struct evhttp_uri *
 evhttp_uri_parse(const char *source_uri)
 {

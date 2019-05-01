@@ -270,8 +270,8 @@ struct evbuffer_file_segment {
 	unsigned flags; /**< combination of EVBUF_FS_* flags  */
 
 	/** What kind of file segment is this? */
-	unsigned can_sendfile : 1;
-	unsigned is_mapping : 1;
+	unsigned can_sendfile : 1; // 表示sendfile是否可以使用
+	unsigned is_mapping : 1;	// 表示mmap是否可以使用
 
 	/** The fd that we read the data from. */
 	int fd;

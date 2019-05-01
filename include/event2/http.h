@@ -488,6 +488,7 @@ void evhttp_send_reply_end(struct evhttp_request *req);
  * callbacks; use evhttp_set_allowed_methods() to change which methods
  * are allowed.
  */
+// http 请求方法类型
 enum evhttp_cmd_type {
 	EVHTTP_REQ_GET     = 1 << 0,
 	EVHTTP_REQ_POST    = 1 << 1,
@@ -501,6 +502,7 @@ enum evhttp_cmd_type {
 };
 
 /** a request object can represent either a request or a reply */
+// request的类型，request 还是 response
 enum evhttp_request_kind { EVHTTP_REQUEST, EVHTTP_RESPONSE };
 
 /**

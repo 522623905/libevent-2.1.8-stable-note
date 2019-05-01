@@ -87,6 +87,7 @@ static const struct table_entry {
 };
 
 /* Try to guess a good content-type for 'path' */
+// 传入请求的路径，返回文件类型（根据请求资源的后缀名返回响应的MIME类型）
 static const char *
 guess_content_type(const char *path)
 {
@@ -107,6 +108,7 @@ not_found:
 
 /* Callback used for the /dump URI, and for every non-GET request:
  * dumps all information to stdout and gives back a trivial 200 ok */
+// 当uri为/dump时的回调，操作是打印全部的请求信息
 static void
 dump_request_cb(struct evhttp_request *req, void *arg)
 {
@@ -115,6 +117,7 @@ dump_request_cb(struct evhttp_request *req, void *arg)
 	struct evkeyval *header;
 	struct evbuffer *buf;
 
+	// 判断request类型
 	switch (evhttp_request_get_command(req)) {
 	case EVHTTP_REQ_GET: cmdtype = "GET"; break;
 	case EVHTTP_REQ_POST: cmdtype = "POST"; break;
@@ -131,12 +134,14 @@ dump_request_cb(struct evhttp_request *req, void *arg)
 	printf("Received a %s request for %s\nHeaders:\n",
 	    cmdtype, evhttp_request_get_uri(req));
 
-	headers = evhttp_request_get_input_headers(req);
+	// 获取并打印客户端发送的Header内容
+	headers = evhttp_request_get_input_headers(req); 
 	for (header = headers->tqh_first; header;
 	    header = header->next.tqe_next) {
 		printf("  %s: %s\n", header->key, header->value);
 	}
 
+	// 获取客户端发送的body内容
 	buf = evhttp_request_get_input_buffer(req);
 	puts("Input data: <<<");
 	while (evbuffer_get_length(buf)) {
@@ -144,7 +149,7 @@ dump_request_cb(struct evhttp_request *req, void *arg)
 		char cbuf[128];
 		n = evbuffer_remove(buf, cbuf, sizeof(cbuf));
 		if (n > 0)
-			(void) fwrite(cbuf, 1, n, stdout);
+			(void) fwrite(cbuf, 1, n, stdout); // 把cbuf内容输出到屏幕
 	}
 	puts(">>>");
 
@@ -155,16 +160,17 @@ dump_request_cb(struct evhttp_request *req, void *arg)
  * any other callback.  Like any evhttp server callback, it has a simple job:
  * it must eventually call evhttp_send_error() or evhttp_send_reply().
  */
+// 通用uri的回调函数，就是将请求的资源发送给客户端（浏览器）
 static void
 send_document_cb(struct evhttp_request *req, void *arg)
 {
 	struct evbuffer *evb = NULL;
-	const char *docroot = arg;
-	const char *uri = evhttp_request_get_uri(req);
+	const char *docroot = arg; // 要传送的本地目录
+	const char *uri = evhttp_request_get_uri(req); // 获取客户端访问的路径
 	struct evhttp_uri *decoded = NULL;
 	const char *path;
 	char *decoded_path;
-	char *whole_path = NULL;
+	char *whole_path = NULL; // 这个才是客户要访问的对应于服务端主机的真正路径
 	size_t len;
 	int fd = -1;
 	struct stat st;
@@ -199,13 +205,15 @@ send_document_cb(struct evhttp_request *req, void *arg)
 	if (strstr(decoded_path, ".."))
 		goto err;
 
-	len = strlen(decoded_path)+strlen(docroot)+2;
+	len = strlen(decoded_path)+strlen(docroot)+2; // 完整路径的长度
 	if (!(whole_path = malloc(len))) {
 		perror("malloc");
 		goto err;
 	}
-	evutil_snprintf(whole_path, len, "%s/%s", docroot, decoded_path);
+	// 被访问的服务端主机的真正路径=docroot/decoded_path
+	evutil_snprintf(whole_path, len, "%s/%s", docroot, decoded_path); 
 
+	// 获取该路径下的文件信息
 	if (stat(whole_path, &st)<0) {
 		goto err;
 	}
@@ -216,19 +224,20 @@ send_document_cb(struct evhttp_request *req, void *arg)
 	if (S_ISDIR(st.st_mode)) {
 		/* If it's a directory, read the comments and make a little
 		 * index page */
+		// 如果请求的路径是目录，则传输传输路径下的文件名等html格式过去
 #ifdef _WIN32
 		HANDLE d;
 		WIN32_FIND_DATAA ent;
 		char *pattern;
 		size_t dirlen;
 #else
-		DIR *d;
-		struct dirent *ent;
+		DIR *d;	// 目录
+		struct dirent *ent; // 目录中的一项文件
 #endif
 		const char *trailing_slash = "";
 
 		if (!strlen(path) || path[strlen(path)-1] != '/')
-			trailing_slash = "/";
+			trailing_slash = "/"; // 结尾斜杠 /
 
 #ifdef _WIN32
 		dirlen = strlen(whole_path);
@@ -264,6 +273,7 @@ send_document_cb(struct evhttp_request *req, void *arg)
 		do {
 			const char *name = ent.cFileName;
 #else
+		// 循环读取目录下的文件标题，添加至html
 		while ((ent = readdir(d))) {
 			const char *name = ent->d_name;
 #endif
@@ -286,6 +296,7 @@ send_document_cb(struct evhttp_request *req, void *arg)
 	} else {
 		/* Otherwise it's a file; add it to the buffer to get
 		 * sent via sendfile */
+		// 如果请求的路径，不是目录，而是文件，则传输文件过去
 		const char *type = guess_content_type(decoded_path);
 		if ((fd = open(whole_path, O_RDONLY)) < 0) {
 			perror("open");
@@ -299,8 +310,8 @@ send_document_cb(struct evhttp_request *req, void *arg)
 			goto err;
 		}
 		evhttp_add_header(evhttp_request_get_output_headers(req),
-		    "Content-Type", type);
-		evbuffer_add_file(evb, fd, 0, st.st_size);
+		    "Content-Type", type); // 指示资源的MIME类型类型
+		evbuffer_add_file(evb, fd, 0, st.st_size); // 传输文件
 	}
 
 	evhttp_send_reply(req, 200, "OK", evb);
@@ -320,6 +331,7 @@ done:
 		evbuffer_free(evb);
 }
 
+// 打印程序用法
 static void
 syntax(void)
 {
@@ -329,15 +341,16 @@ syntax(void)
 int
 main(int argc, char **argv)
 {
-	struct event_base *base;
-	struct evhttp *http;
-	struct evhttp_bound_socket *handle;
+	struct event_base *base; // event base
+	struct evhttp *http; // http server
+	struct evhttp_bound_socket *handle; // server绑定的地址、端口
 
-	ev_uint16_t port = 0;
+	ev_uint16_t port = 0; // 随机选择一个端口
 #ifdef _WIN32
 	WSADATA WSAData;
 	WSAStartup(0x101, &WSAData);
 #else
+	// 忽略SIGPIPE信号
 	if (signal(SIGPIPE, SIG_IGN) == SIG_ERR)
 		return (1);
 #endif
@@ -353,6 +366,7 @@ main(int argc, char **argv)
 	}
 
 	/* Create a new evhttp object to handle requests. */
+	// 创建一个http server，并指定所属的base
 	http = evhttp_new(base);
 	if (!http) {
 		fprintf(stderr, "couldn't create evhttp. Exiting.\n");
@@ -360,13 +374,16 @@ main(int argc, char **argv)
 	}
 
 	/* The /dump URI will dump all requests to stdout and say 200 ok. */
+	// /dump uri地址的回调
 	evhttp_set_cb(http, "/dump", dump_request_cb, NULL);
 
 	/* We want to accept arbitrary requests, so we need to set a "generic"
 	 * cb.  We can also add callbacks for specific paths. */
+	// 通用地址的回调,argv[1]为要访问的本地目录
 	evhttp_set_gencb(http, send_document_cb, argv[1]);
 
 	/* Now we tell the evhttp what port to listen on */
+	// 设置http server要地址+端口号
 	handle = evhttp_bind_socket_with_handle(http, "0.0.0.0", port);
 	if (!handle) {
 		fprintf(stderr, "couldn't bind to port %d. Exiting.\n",
@@ -376,6 +393,7 @@ main(int argc, char **argv)
 
 	{
 		/* Extract and display the address we're listening on. */
+		// 提取并打印监听的地址、端口
 		struct sockaddr_storage ss;
 		evutil_socket_t fd;
 		ev_socklen_t socklen = sizeof(ss);
