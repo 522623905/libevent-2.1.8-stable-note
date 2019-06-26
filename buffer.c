@@ -1709,10 +1709,10 @@ struct evbuffer_ptr
 
     EVBUFFER_LOCK(buffer);
 
-    // 没有指明start则从头开始找
     if (start) {
         memcpy(&it, start, sizeof(it));
     } else {
+        // 没有指明start则从头开始找
         it.pos = 0;
         it.internal_.chain = buffer->first;
         it.internal_.pos_in_chain = 0;

@@ -1046,6 +1046,7 @@ evhttp_lingering_fail(struct evhttp_connection *evcon,
 		evhttp_connection_fail_(evcon, EVREQ_HTTP_DATA_TOO_LONG);
 }
 
+// 读取请求体body的内容
 static void
 evhttp_read_body(struct evhttp_connection *evcon, struct evhttp_request *req)
 {
@@ -1131,7 +1132,7 @@ evhttp_read_body(struct evhttp_connection *evcon, struct evhttp_request *req)
  * Gets called when more data becomes available
  */
 
-// http connection的bufferevent读回调
+// http connection的bufferevent读回调，解析请求行line+请求头header+请求体body
 static void
 evhttp_read_cb(struct bufferevent *bufev, void *arg)
 {
@@ -1142,18 +1143,22 @@ evhttp_read_cb(struct bufferevent *bufev, void *arg)
 	event_deferred_cb_cancel_(get_deferred_queue(evcon),
 	    &evcon->read_more_deferred_cb);
 
+	// http状态机
 	switch (evcon->state) {
 	case EVCON_READING_FIRSTLINE:
+		// 读取请求行内容
 		evhttp_read_firstline(evcon, req);
 		/* note the request may have been freed in
 		 * evhttp_read_body */
 		break;
 	case EVCON_READING_HEADERS:
+		// 读取请求头内容
 		evhttp_read_header(evcon, req);
 		/* note the request may have been freed in
 		 * evhttp_read_body */
 		break;
 	case EVCON_READING_BODY:
+		// 读取请求体内容
 		evhttp_read_body(evcon, req);
 		/* note the request may have been freed in
 		 * evhttp_read_body */
@@ -1650,6 +1655,7 @@ evhttp_valid_response_code(int code)
 	return (1);
 }
 
+// 解析版本号，如version="HTTP/1.1"
 static int
 evhttp_parse_http_version(const char *version, struct evhttp_request *req)
 {
@@ -1704,6 +1710,7 @@ evhttp_parse_response_line(struct evhttp_request *req, char *line)
 
 /* Parse the first line of a HTTP request */
 
+// 解析http请求行
 static int
 evhttp_parse_request_line(struct evhttp_request *req, char *line)
 {
@@ -1716,13 +1723,17 @@ evhttp_parse_request_line(struct evhttp_request *req, char *line)
 	enum evhttp_cmd_type type;
 
 	/* Parse the request line */
-	method = strsep(&line, " ");
+	// strsep(stringp,delim) 第一个参数传入需要分析的字符串，
+	// 第二个参数传入 delim 符号，假设 stringp 为 NULL 字符串，
+	// 则函式会回传 NULL，换句话说，strsep 会找到 stringp 字符串第一个出现 delim 符号，
+	// 并将其取代为 \0 符号，然后将 stringp 更新指向到 \0 符号的下一个字符串
+	method = strsep(&line, " "); // 获取请求方法
 	if (line == NULL)
 		return (-1);
-	uri = strsep(&line, " ");
+	uri = strsep(&line, " ");  // 获取uri
 	if (line == NULL)
 		return (-1);
-	version = strsep(&line, " ");
+	version = strsep(&line, " "); // 获取版本号,如http/1.1
 	if (line != NULL)
 		return (-1);
 
@@ -1730,6 +1741,7 @@ evhttp_parse_request_line(struct evhttp_request *req, char *line)
 	type       = EVHTTP_REQ_UNKNOWN_;
 
 	/* First line */
+	// 解析请求方法，如get post put ....
 	switch (method_len) {
 	    case 3:
 		/* The length of the method string is 3, meaning it can only be one of two methods: GET or PUT */
@@ -1843,9 +1855,11 @@ evhttp_parse_request_line(struct evhttp_request *req, char *line)
 	    
 	req->type = type;
 
+	// 解析版本号并赋值
 	if (evhttp_parse_http_version(version, req) < 0)
 		return (-1);
 
+	// 赋值uri
 	if ((req->uri = mm_strdup(uri)) == NULL) {
 		event_debug(("%s: mm_strdup", __func__));
 		return (-1);
@@ -1859,6 +1873,8 @@ evhttp_parse_request_line(struct evhttp_request *req, char *line)
 	/* If we have an absolute-URI, check to see if it is an http request
 	   for a known vhost or server alias. If we don't know about this
 	   host, we consider it a proxy request. */
+	// 如果我们有一个绝对URI，请检查它是否是已知vhost或服务器别名的http请求。
+	// 如果我们不了解这个主机，我们认为它是一个代理请求
 	scheme = evhttp_uri_get_scheme(req->uri_elems);
 	hostname = evhttp_uri_get_host(req->uri_elems);
 	if (scheme && (!evutil_ascii_strcasecmp(scheme, "http") ||
@@ -2006,6 +2022,7 @@ evhttp_add_header_internal(struct evkeyvalq *headers,
  *   ALL_DATA_READ       when all headers have been read.
  */
 
+// 解析第一行内容
 enum message_read_status
 evhttp_parse_firstline_(struct evhttp_request *req, struct evbuffer *buffer)
 {
@@ -2033,10 +2050,12 @@ evhttp_parse_firstline_(struct evhttp_request *req, struct evbuffer *buffer)
 
 	switch (req->kind) {
 	case EVHTTP_REQUEST:
+		// 解析请求行
 		if (evhttp_parse_request_line(req, line) == -1)
 			status = DATA_CORRUPTED;
 		break;
 	case EVHTTP_RESPONSE:
+		// 解析响应行
 		if (evhttp_parse_response_line(req, line) == -1)
 			status = DATA_CORRUPTED;
 		break;
@@ -2078,6 +2097,7 @@ evhttp_append_to_last_header(struct evkeyvalq *headers, char *line)
 	return (0);
 }
 
+// 解析头部
 enum message_read_status
 evhttp_parse_headers_(struct evhttp_request *req, struct evbuffer* buffer)
 {
@@ -2087,6 +2107,7 @@ evhttp_parse_headers_(struct evhttp_request *req, struct evbuffer* buffer)
 
 	struct evkeyvalq* headers = req->input_headers;
 	size_t line_length;
+	// 逐行读取并统计header信息
 	while ((line = evbuffer_readln(buffer, &line_length, EVBUFFER_EOL_CRLF))
 	       != NULL) {
 		char *skey, *svalue;
@@ -2099,6 +2120,7 @@ evhttp_parse_headers_(struct evhttp_request *req, struct evbuffer* buffer)
 			goto error;
 		}
 
+		// 表示所有头部读取完毕
 		if (*line == '\0') { /* Last header - Done */
 			status = ALL_DATA_READ;
 			mm_free(line);
@@ -2115,13 +2137,14 @@ evhttp_parse_headers_(struct evhttp_request *req, struct evbuffer* buffer)
 
 		/* Processing of header lines */
 		svalue = line;
-		skey = strsep(&svalue, ":");
+		skey = strsep(&svalue, ":"); // 获取header的key
 		if (svalue == NULL)
 			goto error;
 
-		svalue += strspn(svalue, " ");
+		svalue += strspn(svalue, " "); // 获取header的value
 		evutil_rtrim_lws_(svalue);
 
+		// 记录headers
 		if (evhttp_add_header(headers, skey, svalue) == -1)
 			goto error;
 
@@ -2261,6 +2284,7 @@ evhttp_get_body(struct evhttp_connection *evcon, struct evhttp_request *req)
 	/* note the request may have been freed in evhttp_read_body */
 }
 
+// http读取请求行内容
 static void
 evhttp_read_firstline(struct evhttp_connection *evcon,
 		      struct evhttp_request *req)
@@ -2283,6 +2307,7 @@ evhttp_read_firstline(struct evhttp_connection *evcon,
 	evhttp_read_header(evcon, req);
 }
 
+// 读取请求头内容
 static void
 evhttp_read_header(struct evhttp_connection *evcon,
 		   struct evhttp_request *req)
@@ -2290,6 +2315,7 @@ evhttp_read_header(struct evhttp_connection *evcon,
 	enum message_read_status res;
 	evutil_socket_t fd = evcon->fd;
 
+	// 解析头部字段
 	res = evhttp_parse_headers_(req, bufferevent_get_input(evcon->bufev));
 	if (res == DATA_CORRUPTED || res == DATA_TOO_LONG) {
 		/* Error while reading, terminate */
@@ -2724,6 +2750,7 @@ evhttp_cancel_request(struct evhttp_request *req)
  * Request structure needs to be set up correctly.
  */
 
+// 对&evcon->bufev开启监听读事件，设置相关回调函数
 void
 evhttp_start_read_(struct evhttp_connection *evcon)
 {
@@ -2732,6 +2759,7 @@ evhttp_start_read_(struct evhttp_connection *evcon)
 
 	evcon->state = EVCON_READING_FIRSTLINE;
 	/* Reset the bufferevent callbacks */
+	// 设置bufferevent的回调函数！
 	bufferevent_setcb(evcon->bufev,
 	    evhttp_read_cb,
 	    evhttp_write_cb,
@@ -3526,7 +3554,7 @@ evhttp_handle_request(struct evhttp_request *req, void *arg)
 }
 
 /* Listener callback when a connection arrives at a server. */
-// 作为回调函数,accept 一个 socket
+// 内部使用，作为监听器的回调函数,accept 一个 socket
 static void
 accept_socket_cb(struct evconnlistener *listener, evutil_socket_t nfd, struct sockaddr *peer_sa, int peer_socklen, void *arg)
 {
@@ -4279,11 +4307,13 @@ evhttp_get_request_connection(
 	return (evcon);
 }
 
+// 初始化一个绑定到evcon的evhttp_request
 static int
 evhttp_associate_new_request_with_connection(struct evhttp_connection *evcon)
 {
 	struct evhttp *http = evcon->http_server;
 	struct evhttp_request *req;
+	// 在这里会设置该req的回调函数evhttp_handle_request(),此函数很重要
 	if ((req = evhttp_request_new(evhttp_handle_request, http)) == NULL)
 		return (-1);
 
@@ -4308,7 +4338,7 @@ evhttp_associate_new_request_with_connection(struct evhttp_connection *evcon)
 
 	req->kind = EVHTTP_REQUEST;
 
-
+	// 读取数据
 	evhttp_start_read_(evcon);
 
 	return (0);
@@ -4344,6 +4374,7 @@ evhttp_get_request(struct evhttp *http, evutil_socket_t fd,
 	// 将evcon插入到&http->connections
 	TAILQ_INSERT_TAIL(&http->connections, evcon, next);
 
+	// 初始化一个绑定到evcon的evhttp_request
 	if (evhttp_associate_new_request_with_connection(evcon) == -1)
 		evhttp_connection_free(evcon);
 }

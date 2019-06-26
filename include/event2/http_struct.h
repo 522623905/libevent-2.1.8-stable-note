@@ -96,8 +96,8 @@ struct {
 	enum evhttp_request_kind kind; // request的类型，request 还是 response
 	enum evhttp_cmd_type type; // http请求方法类型
 
-	size_t headers_size;
-	size_t body_size;
+	size_t headers_size;	// 头部总字节数
+	size_t body_size;		// body总字节数
 
 	// 要访问的uri
 	char *uri;			/* uri after HTTP request was parsed */
